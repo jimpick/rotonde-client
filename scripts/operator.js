@@ -3,11 +3,16 @@ function Operator(el)
   this.el = document.createElement('div'); this.el.id = "operator";
   this.input_wrapper = document.createElement('div'); this.input_wrapper.id = "wrapper"
   this.input_el = document.createElement('textarea'); this.input_el.id = "commander";
-  this.input_el.setAttribute("placeholder","Input command here");
+  this.input_el.setAttribute("placeholder","Connected as @neauoire");
   this.hint_el = document.createElement('t'); this.hint_el.id = "hint";
+  this.options_el = document.createElement('div'); this.options_el.id = "options"
+  this.rune_el = document.createElement('div'); this.rune_el.id = "rune"
   this.input_wrapper.appendChild(this.input_el);
   this.input_wrapper.appendChild(this.hint_el);
+  this.input_wrapper.appendChild(this.rune_el)
   this.el.appendChild(this.input_wrapper)
+  this.el.appendChild(this.options_el)
+  
   this.name_pattern = new RegExp(/^@(\w+)/, "i");
 
   this.install = function(el)
@@ -20,18 +25,32 @@ function Operator(el)
     this.input_el.addEventListener('dragleave',r.operator.drag_leave, false);
     this.input_el.addEventListener('drop',r.operator.drop, false);
 
+    this.options_el.innerHTML = "<t data-operation='filter keyword'>filter</t> <t data-operation='whisper:user_name message'>whisper</t> <t data-operation='quote:user_name-id message'>quote</t> <t data-operation='message >> media.jpg'>media</t> <t class='right' data-operation='edit:id message'>edit</t> <t class='right' data-operation='delete:id'>delete</t>";
+
     this.update();
   }
 
   this.update = function()
   {
     this.grow_input_height(this.input_el);
+
     var input = this.input_el.value.trim();
     var words = input === "" ? 0 : input.split(" ").length;
     var chars = input.length;
     var key = this.input_el.value.split(" ")[this.input_el.value.split(" ").length-1];
     
     this.hint_el.innerHTML = chars+"C "+words+"W";
+    this.rune_el.innerHTML = ">";
+    this.rune_el.className = input.length > 0 ? "input" : "";
+
+    var keywords = ["filter","whisper","quote","edit","delete"]
+    
+    if(keywords.indexOf(input.split(" ")[0]) > -1 || input.indexOf(":") > -1){
+      this.rune_el.innerHTML = "$";
+    }
+    if(input.indexOf(">>") > -1){
+      this.rune_el.innerHTML = "!";
+    }
   }
 
   this.validate = function()
@@ -55,6 +74,7 @@ function Operator(el)
   {
     this.input_el.value = text;
     this.input_el.focus();
+    this.update();
   }
 
   this.commands = {};

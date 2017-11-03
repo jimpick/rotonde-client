@@ -96,11 +96,16 @@ function Portal(url)
     return p.json.feed[p.json.feed.length-1].timestamp;
   }
 
+  this.time_offset = function() // days
+  {
+    return (Date.now() - this.updated())/1000;
+  }
+
   this.badge = function()
   {
     var html = "";
 
-    return "<yu class='badge'><img src='"+this.archive.url+"/media/content/icon.svg'/><a href='"+this.url+"'>"+this.relationship()+this.json.name+"</a><br />"+this.last_entry().time_ago()+" ago</yu>";
+    return "<yu class='badge'><img src='"+this.archive.url+"/media/content/icon.svg'/><a data-operation='"+this.url+"'>"+this.relationship()+this.json.name+"</a><br />"+this.last_entry().time_ago()+" ago</yu>";
   }
 }
 

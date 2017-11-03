@@ -44,7 +44,6 @@ function Home()
   this.version_el = document.createElement('div'); this.version_el.id = "version";
   this.el.appendChild(this.version_el);
 
-
   this.feed = new Feed();
 
   this.install = function()
@@ -52,6 +51,9 @@ function Home()
     r.el.appendChild(r.home.el);
     r.home.update();
     r.home.log("ready");
+
+  r.home.portal.json.client_version = r.client_version;
+  r.home.version_el.innerHTML = "◒ <a href='https://github.com/Rotonde/rotonde-client' target='_blank'>"+r.home.portal.json.client_version+"</a>";
 
     setInterval(r.home.discover, 4000);
   }
@@ -78,15 +80,22 @@ function Home()
     var html = "";
     for(id in this.feed.portals){
       var portal = this.feed.portals[id];
-      html += "<ln><a href='"+this.feed.portals[id].url+"'>"+portal.relationship()+""+portal.json.name+"</a></ln>";
+      var activity_class = "";
+
+      if(portal.time_offset() < 86400){
+        activity_class = "active";
+      }
+      else if(portal.time_offset()/86400 > 5){
+        activity_class = "inactive";
+      }
+      html += "<ln class='"+activity_class+"'><a title='"+(portal && portal.last_entry() ? portal.last_entry().time_ago() : "No entries")+"' href='"+portal.url+"'>"+portal.relationship()+""+portal.json.name+"</a></ln>";
     }
     this.port_list_el.innerHTML = html;
   }
 
   this.log = function(text)
   {
-    r.home.portal.json.client_version = r.client_version;
-    r.home.version_el.innerHTML = "◒ <a href='https://github.com/Rotonde/rotonde-client' target='_blank'>"+r.home.portal.json.client_version+"</a> "+text;
+    r.operator.input_el.setAttribute("placeholder",text);
   }
 
   this.collect_network = function()
@@ -130,7 +139,7 @@ function Home()
   {
     if(r.home.feed.queue.length > 0){ return; }
 
-    r.home.log("Discovering..");
+    r.home.log("Discovering network of "+r.home.network.length+" portals.. ");
 
     var rand = parseInt(Math.random() * r.home.network.length);
     var portal = new Portal(r.home.network[rand]);
