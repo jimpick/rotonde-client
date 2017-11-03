@@ -164,7 +164,7 @@ function Home()
       if(portal.is_known()){
         return;
       }
-      if(portal.time_offset()/86400 > 5){
+      if(portal.time_offset()/86400 > 1.5){
         return;
       }
       if(portal.url.length != 71){
