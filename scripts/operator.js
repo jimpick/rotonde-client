@@ -43,7 +43,8 @@ function Operator(el)
     var chars = input.length;
     var key = this.input_el.value.split(" ")[this.input_el.value.split(" ").length-1];
 
-    this.hint_el.innerHTML = chars+"C "+words+"W";
+    this.hint_el.innerHTML = this.autocomplete_words().length > 0 ? this.autocomplete_words()[0] : chars+"C "+words+"W";
+    this.hint_el.className = this.autocomplete_words().length > 0 ? "autocomplete" : "";
     this.rune_el.innerHTML = ">";
     this.rune_el.className = input.length > 0 ? "input" : "";
 
@@ -88,7 +89,6 @@ function Operator(el)
 
   this.commands = {};
 
-  // catches neauoire from @neauoire
   this.commands.say = function(p)
   {
     var message = p.trim();
@@ -102,20 +102,22 @@ function Operator(el)
       message = message.split(" >> ")[0].trim();
     }
 
-    var data = {message:message,timestamp:Date.now()};
+    var data = {media:"", message:message, timestamp:Date.now(), target:[]};
     if(media){
       data.media = media;
     }
-    // if message starts with an @ symbol, then we're doing a mention
-    if(message.indexOf("@") == 0){
-      var name = message.split(" ")[0]
-      // execute the regex & get the first matching group (i.e. no @, only the name)
-      name = r.operator.name_pattern.exec(name)[1]
-      var portals = r.operator.lookup_name(name);
+    // handle mentions
+    var exp = /([@~])(\w+)/g;
+    var tmp;
+    while((tmp = exp.exec(message)) !== null){
+      var portals = r.operator.lookup_name(tmp[2]);
       if(portals.length > 0){
-        data.target = portals[0].url;
+        data.target.push(portals[0].url);
+      }else{
+        data.target.push("");
       }
     }
+
     r.home.add_entry(new Entry(data));
     setTimeout(r.home.feed.refresh, 250);
   }
@@ -179,28 +181,6 @@ function Operator(el)
     setTimeout(r.home.feed.refresh, 250);
   }
 
-  this.commands.fix_port = function()
-  {
-    var promises = r.home.portal.json.port.map(function(portal) {
-        return new Promise(function(resolve, reject) {
-            console.log("first promise")
-            if(portal.slice(-1) !== "/") { portal += "/" }
-            if(r.home.portal.url == portal){ return; }
-            // resolve dns shortnames to their actual dat:// URIs
-            DatArchive.resolveName(portal).then(function(result) {
-                result = "dat://" + result + "/";
-                resolve(result);
-            }).catch(function(e) { console.error("Error when resolving in fix_port:operator.js", e, portal); resolve(portal) })
-        })
-    })
-    Promise.all(promises).then(function(fixed_ports) {
-        r.home.portal.json.port = fixed_ports;
-        r.home.save();
-    }).catch(function(e) {
-        console.error("Error when fixing ports; probably offline or malformed json", e)
-    })
-  }
-
   this.commands.delete = function(p,option)
   {
     r.home.portal.json.feed.splice(option, 1)
@@ -208,12 +188,17 @@ function Operator(el)
     setTimeout(r.home.feed.refresh, 250);
   }
 
-  this.commands.filter = function(p,option)
+  this.commands.filter = function(p,option = null)
   {
     window.location.hash = option;
     r.home.feed.filter = p;
     r.home.feed.target = option;
-    setTimeout(r.home.feed.refresh, 250);
+
+    r.home.feed.el.className = option;
+
+    if(p){
+      setTimeout(r.home.feed.refresh, 250);
+    }
   }
 
   this.commands.clear_filter = function()
@@ -280,17 +265,26 @@ function Operator(el)
     r.home.add_entry(new Entry(data));
   }
 
-  this.commands.mentions = function()
+  this.autocomplete_words = function()
   {
-    r.home.feed.filter = "@" + r.home.portal.json.name;
+    var words = r.operator.input_el.value.split(" ");
+    var last = words[words.length - 1]
+    var name_match = r.operator.name_pattern.exec(last);
 
-    setTimeout(r.home.feed.refresh, 250);
+    if(!name_match){ return []; }
+    var a = [];
+    var name = name_match[1];
+    for(i in r.home.feed.portals){
+      var portal = r.home.feed.portals[i];
+      if(portal.json.name && portal.json.name.substr(0, name.length) == name){
+        a.push(portal.json.name);
+      }
+    }
+    return a
   }
 
   this.key_down = function(e)
   {
-    //console.log(e);
-
     if(e.key == "Enter" && !e.shiftKey){
       e.preventDefault();
       r.operator.validate();
@@ -304,19 +298,11 @@ function Operator(el)
 
     if(e.key == "Tab"){
       e.preventDefault();
-
       var words = r.operator.input_el.value.split(" ");
       var last = words[words.length - 1]
       var name_match = r.operator.name_pattern.exec(last);
       if(name_match) {
-        var autocomplete = [];
-        var name = name_match[1];
-        for(i in r.home.feed.portals){
-          var portal = r.home.feed.portals[i];
-          if(portal.json.name && portal.json.name.substr(0, name.length) == name){
-            autocomplete.push(portal.json.name);
-          }
-        }
+        var autocomplete = r.operator.autocomplete_words();
         if (autocomplete.length > 0) {
           words[words.length - 1] = "@" + autocomplete[0];
           r.operator.inject(words.join(" ")+" ");
@@ -327,7 +313,9 @@ function Operator(el)
     }
 
     if(e.key == "ArrowUp"){
-      e.preventDefault();
+      if(r.operator.cmd_history.length > 0){
+        e.preventDefault();
+      }
       if(r.operator.cmd_index == -1){
         r.operator.cmd_index = r.operator.cmd_history.length-1;
         r.operator.cmd_buffer = r.operator.input_el.value;
@@ -335,13 +323,14 @@ function Operator(el)
       else if(r.operator.cmd_index > 0){
         r.operator.cmd_index -= 1;
       }
-
       if(r.operator.cmd_history.length > 0){
         r.operator.inject(r.operator.cmd_history[r.operator.cmd_index]);
       }
     }
     if(e.key == "ArrowDown"){
-      e.preventDefault();
+      if(r.operator.cmd_history.length > 0){
+        e.preventDefault();
+      }
       if(r.operator.cmd_index == r.operator.cmd_history.length-1 && r.operator.cmd_history.length > 0){
         r.operator.inject(r.operator.cmd_buffer);
         r.operator.cmd_index = -1;
@@ -420,8 +409,7 @@ function Operator(el)
 
   this.validate_site = function(s)
   {
-    if(s)
-    {
+    if(s){
         //strip trailing slash
       s = s.replace(/\/$/, '');
         //does it have no http/https/dat? default to http

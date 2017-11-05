@@ -21,6 +21,14 @@ function Entry(data,host)
 
   this.to_html = function()
   {
+    this.is_mention = false;
+    for(i in this.target){
+      if(to_hash(this.target[i]) == to_hash(r.home.portal.url)){
+        console.log("we got mentioned!");
+        this.is_mention = true;
+      }
+    }
+
     var html = "";
 
     html += this.icon();
@@ -28,7 +36,7 @@ function Entry(data,host)
     html += this.body();
     html += this.rmc();
 
-    return "<div class='entry "+(this.whisper ? 'whisper' : '')+" "+(this.message.length < 100 ? 'large' : '')+"'>"+html+"<hr/></div>";
+    return "<div class='entry "+(this.whisper ? 'whisper' : '')+" "+(this.message.length < 100 ? 'large' : '')+" "+(this.is_mention ? 'mention' : '')+"'>"+html+"<hr/></div>";
   }
 
   this.icon = function()
@@ -203,20 +211,13 @@ function Entry(data,host)
     return timeSince(this.timestamp);
   }
 
-  this.is_visible = function(filter = null,target = null)
+  this.is_visible = function(filter = null,feed_target = null)
   {
-    if(this.whisper && this.target != r.home.portal.url && this.host.json.name != r.home.portal.json.name){
+    if(this.whisper && to_hash(this.target) != to_hash(r.home.portal.url) && this.host.json.name != r.home.portal.json.name){
       return false;
     }
     if(filter && this.message.indexOf(filter) < 0){
       return false;
-    }
-    if(target){
-      var username = target.split("-")[0]
-      var entry_id = target.split("-")[1]
-      if(this.id != entry_id || this.host.json.name != username){
-        return false;  
-      }
     }
     return true;
   }

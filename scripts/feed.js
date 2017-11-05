@@ -12,7 +12,11 @@ function Feed(feed_urls)
   this.tab_services_el = document.createElement('t'); this.tab_services_el.id = "tab_services";
 
   this.tab_portals_el.setAttribute("data-operation","filter:portals");
+  this.tab_mentions_el.setAttribute("data-operation","filter:mentions");
   this.tab_timeline_el.setAttribute("data-operation","clear_filter");
+  this.tab_portals_el.setAttribute("data-validate","true");
+  this.tab_mentions_el.setAttribute("data-validate","true");
+  this.tab_timeline_el.setAttribute("data-validate","true");
 
   this.el.appendChild(this.tabs_el);
   this.tabs_el.appendChild(this.tab_timeline_el);
@@ -21,8 +25,8 @@ function Feed(feed_urls)
   this.tabs_el.appendChild(this.tab_network_el);
   this.tabs_el.appendChild(this.tab_services_el);
 
-  this.wr_timeline_el = document.createElement('div'); this.wr_timeline_el.id = "tab_timeline";
-  this.wr_portals_el = document.createElement('div'); this.wr_portals_el.id = "tab_portals";
+  this.wr_timeline_el = document.createElement('div'); this.wr_timeline_el.id = "wr_timeline";
+  this.wr_portals_el = document.createElement('div'); this.wr_portals_el.id = "wr_portals";
 
   this.el.appendChild(this.wr_el);
   this.wr_el.appendChild(this.wr_timeline_el);
@@ -40,9 +44,6 @@ function Feed(feed_urls)
   {
     r.el.appendChild(r.home.feed.el);
     r.home.feed.start();
-
-    r.home.feed.tab_timeline_el.className = "active";
-    r.home.feed.tab_mentions_el.setAttribute("data-operation","filter "+r.home.portal.json.name);
   }
 
   this.start = function()
@@ -62,7 +63,7 @@ function Feed(feed_urls)
   this.next = async function()
   {
     if(r.home.feed.queue.length < 1){ console.log("Reached end of queue"); r.home.feed.update_log(); return; }
-    if(Date.now() - r.home.feed.last_update < 500){ return; }
+    if(Date.now() - r.home.feed.last_update < 250){ return; }
 
     var url = r.home.feed.queue[0];
 
@@ -101,6 +102,8 @@ function Feed(feed_urls)
 
   this.refresh = function()
   {
+    r.home.feed.target = window.location.hash ? window.location.hash.replace("#","") : "";
+
     console.log("refreshing feed..",r.home.feed.target);
 
     var entries = [];
@@ -121,9 +124,29 @@ function Feed(feed_urls)
     var c = 0;
     for(id in sorted_entries){
       var entry = sorted_entries[id];
+      var legacy = false;
+
+      // legacy mentions
+      if(! (entry.target instanceof Array)){
+        entry.target = [entry.target ? entry.target : ""];
+        legacy = true;
+      }
+
       if(!entry || entry.timestamp > new Date()) { continue; }
       if(!entry.is_visible(r.home.feed.filter,r.home.feed.target)){ continue; }
-      if(entry.message.toLowerCase().indexOf(r.home.portal.json.name) > -1 || (entry.target && entry.target.replace("dat://","").replace("/","").trim() == r.home.portal.url.replace("dat://","").replace("/","").trim()) ){ mentions += 1;}
+      if(legacy && entry.message.toLowerCase().indexOf(r.home.portal.json.name) > -1){
+        // backwards-compatible mention
+        mentions += 1;
+      }
+      if(!legacy){
+        // multiple-mention
+        for(i in entry.target){
+          if(to_hash(entry.target[i]) == to_hash(r.home.portal.url)){
+            mentions += 1;
+            break;
+          }
+        }
+      }
       feed_html += entry.to_html();
       if(c > 40){ break; }
       c += 1;
@@ -134,30 +157,9 @@ function Feed(feed_urls)
     r.home.feed.tab_portals_el.innerHTML = r.home.feed.portals.length+" Portal"+(r.home.feed.portals.length == 1 ? '' : 's')+"";
     r.home.feed.tab_network_el.innerHTML = r.home.network.length+" Network"+(r.home.network.length == 1 ? '' : 's')+"";
 
-    if(r.home.feed.filter == r.home.portal.json.name){
-      r.home.feed.wr_timeline_el.innerHTML = feed_html;
-      r.home.feed.wr_timeline_el.className = "";
-      r.home.feed.wr_portals_el.className = "hidden";
-      r.home.feed.tab_portals_el.className = "";
-      r.home.feed.tab_timeline_el.className = "";
-      r.home.feed.tab_mentions_el.className = "active";
-    }
-    else if(r.home.feed.target == "portals"){
-      r.home.feed.wr_timeline_el.className = "hidden";
-      r.home.feed.wr_portals_el.className = "";
-      r.home.feed.tab_portals_el.className = "active";
-      r.home.feed.tab_timeline_el.className = "";
-      r.home.feed.tab_mentions_el.className = "";
-    }
-    else{
-      feed_html += "<div class='entry'><t class='portal'>$rotonde</t><t class='timestamp'>Just now</t><hr/><t class='message' style='font-style:italic'>Welcome to #rotonde, a decentralized social network. Share your dat:// url with others and add theirs into the input bar to get started.</t></div>"
-      r.home.feed.wr_timeline_el.innerHTML = feed_html;
-      r.home.feed.wr_timeline_el.className = "";
-      r.home.feed.wr_portals_el.className = "hidden";
-      r.home.feed.tab_portals_el.className = "";
-      r.home.feed.tab_timeline_el.className = "active";
-      r.home.feed.tab_mentions_el.className = "";
-    }    
+    r.home.feed.el.className = r.home.feed.target;
+    r.home.feed.wr_timeline_el.innerHTML = feed_html;
+    feed_html += "<div class='entry'><t class='portal'>$rotonde</t><t class='timestamp'>Just now</t><hr/><t class='message' style='font-style:italic'>Welcome to #rotonde, a decentralized social network. Share your dat:// url with others and add theirs into the input bar to get started.</t></div>"
   }
 }
 
