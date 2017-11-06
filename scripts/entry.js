@@ -24,11 +24,10 @@ function Entry(data,host)
     this.is_mention = false;
     for(i in this.target){
       if(to_hash(this.target[i]) == to_hash(r.home.portal.url)){
-        console.log("we got mentioned!");
         this.is_mention = true;
+        break;
       }
     }
-
     var html = "";
 
     html += this.icon();
@@ -36,7 +35,7 @@ function Entry(data,host)
     html += this.body();
     html += this.rmc();
 
-    return "<div class='entry "+(this.whisper ? 'whisper' : '')+" "+(this.message.length < 100 ? 'large' : '')+" "+(this.is_mention ? 'mention' : '')+"'>"+html+"<hr/></div>";
+    return "<div class='entry "+(this.whisper ? 'whisper' : '')+" "+(this.is_mention ? 'mention' : '')+"'>"+html+"<hr/></div>";
   }
 
   this.icon = function()
@@ -48,7 +47,20 @@ function Entry(data,host)
   {
     var html = ""
 
-    html += "<t class='portal'><a href='"+this.host.url+"'>"+this.host.relationship()+this.host.json.name+"</a> "+this.rune()+" "+(this.target ? "<a href='"+this.target+"'>"+portal_from_hash(this.target.toString())+"</a>" : "")+"</t><t class='link' data-operation='filter:"+this.host.json.name+"-"+this.id+"'>•</t>";
+    html += "<t class='portal'><a href='"+this.host.url+"'>"+this.host.relationship()+this.host.json.name+"</a> "+this.rune()+" ";
+
+    for(i in this.target){
+      if(this.target[i]){
+        html += "<a href='" + this.target[i] + "'>" + portal_from_hash(this.target[i].toString()) + "</a>";
+      }else{
+        html += "...";
+      }
+      if(i != this.target.length-1){
+        html += ", ";
+      }
+    }
+
+    html += "</t><t class='link' data-operation='filter:"+this.host.json.name+"-"+this.id+"'>•</t>";
 
     var operation = '';
     if(this.host.json.name == r.home.portal.json.name)
@@ -213,13 +225,50 @@ function Entry(data,host)
 
   this.is_visible = function(filter = null,feed_target = null)
   {
-    if(this.whisper && to_hash(this.target) != to_hash(r.home.portal.url) && this.host.json.name != r.home.portal.json.name){
-      return false;
+    if(feed_target == "mentions"){
+      feed_target = null;
+      if(! this.is_mention){
+        return false;
+      }
+    }
+    if(this.whisper && this.host.json.name != r.home.portal.json.name){
+      for(url in this.target){
+        if(to_hash(url) != to_hash(r.home.portal.url)){
+          return false;
+        }
+      }
     }
     if(filter && this.message.indexOf(filter) < 0){
       return false;
     }
+    if(feed_target && feed_target != this.host.json.name){
+      return false;
+    }
     return true;
+  }
+
+  this.detect_mention = function()
+  {
+    var im = false;
+    //if(this.target){
+      if(! (this.target instanceof Array)){
+        this.target = [this.target ? this.target : ""];
+        if(this.message.toLowerCase().indexOf(r.home.portal.json.name) > -1){
+          im = true;
+        }
+      }
+    else{
+      for(i in this.target){
+        if(to_hash(this.target[i]) == to_hash(r.home.portal.url)){
+          im = true;
+          break;
+        }
+      }
+    }
+      if(im){
+        r.home.feed.mentions += 1;
+      }
+    return im;
   }
 }
 
