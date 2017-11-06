@@ -103,10 +103,13 @@ function Entry(data,host)
       audiotypes = ["mp3", "ogg", "wav"];
       videotypes = ["mp4", "webm"]; // "ogg",
       imagetypes = ["apng", "bmp", "dib", "gif", "jpg", "jpeg", "jpe", "png", "svg", "svgz", "tiff", "tif", "webp"];
-      if(audiotypes.indexOf(extension) > -1){ html += "<audio class='media' src='"+this.host.url+"/media/content/"+this.media+"' controls />"; }
-      else if(videotypes.indexOf(extension) > -1){ html += "<video class='media' src='"+this.host.url+"/media/content/"+this.media+"' controls />"; }
-      else if(imagetypes.indexOf(extension) > -1){ html += "<img class='media' src='"+this.host.url+"/media/content/"+this.media+"'/>"; }
-      else{ html +="<a class='media' href='"+this.host.url+"/media/content/"+this.media+"'>&gt;&gt; "+this.media+"</a>"; }
+
+      var origin = this.quote && this.target ? this.target : this.host.url;
+
+      if(audiotypes.indexOf(extension) > -1){ html += "<audio class='media' src='"+origin+"/media/content/"+this.media+"' controls />"; }
+      else if(videotypes.indexOf(extension) > -1){ html += "<video class='media' src='"+origin+"/media/content/"+this.media+"' controls />"; }
+      else if(imagetypes.indexOf(extension) > -1){ html += "<img class='media' src='"+origin+"/media/content/"+this.media+"'/>"; }
+      else{ html +="<a class='media' href='"+origin+"/media/content/"+this.media+"'>&gt;&gt; "+this.media+"</a>"; }
     }
     return html;
   }
@@ -250,24 +253,29 @@ function Entry(data,host)
   this.detect_mention = function()
   {
     var im = false;
-    //if(this.target){
-      if(! (this.target instanceof Array)){
-        this.target = [this.target ? this.target : ""];
-        if(this.message.toLowerCase().indexOf(r.home.portal.json.name) > -1){
-          im = true;
-        }
+    if(this.target){
+      if(!(this.target instanceof Array)){
+          if(this.target.dat) {
+            this.target = [this.target.dat];
+          } else {
+            this.target = [this.target ? this.target : ""];
+          }
       }
-    else{
-      for(i in this.target){
+
+      if(this.message.toLowerCase().indexOf(r.home.portal.json.name) > -1){
+        im = true;
+      }
+      for(var i in this.target){
         if(to_hash(this.target[i]) == to_hash(r.home.portal.url)){
           im = true;
           break;
         }
       }
     }
-      if(im){
-        r.home.feed.mentions += 1;
-      }
+
+    if(im){
+      r.home.feed.mentions += 1;
+    }
     return im;
   }
 }
