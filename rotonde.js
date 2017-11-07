@@ -1,7 +1,7 @@
 function Rotonde(client_url)
 {
   this.client_url = client_url;
-  this.client_version = "0.1.67";
+  this.client_version = "0.1.68";
 
   // SETUP
 
@@ -60,6 +60,25 @@ function Rotonde(client_url)
     if(remaining.length == 0){
       this.start();
     }
+  }
+
+  // Common functions
+
+  this.escape_html = function(m)
+  {
+    return m
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  this.escape_attr = function(m)
+  {
+    // This assumes that all attributes are wrapped in '', never "".
+    return m
+      .replace(/'/g, "&#039;");
   }
 
   // START
