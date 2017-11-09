@@ -58,8 +58,8 @@ function Feed(feed_urls)
 
   this.start = function()
   {
-    this.queue.push(r.home.portal.url);
-    for(id in r.home.portal.json.port){
+    this.queue.push(r.home.portal.url);
+    for(id in r.home.portal.json.port){
       var url = r.home.portal.json.port[id];
       this.queue.push(url)
     }
@@ -130,11 +130,24 @@ function Feed(feed_urls)
   {
     r.home.feed.page = page;
     r.home.update();
-    await r.home.feed.refresh('page jump ' + f.page);
+    await r.home.feed.refresh('page jump ' + r.home.feed.page);
   }
 
   this.refresh = function(why)
   {
+    if (why && !why.startsWith('delayed: ') && (
+        why == 'saved'
+    )) {
+      // Delay the refresh to occur again after all portals refreshed.
+      setTimeout(async function() {
+        for (var id in r.home.feed.portals) {
+          var portal = r.home.feed.portals[id];
+          await portal.refresh();
+        }
+        r.home.feed.refresh('delayed: ' + why);
+      }, 250);
+      return;
+    }    
     if(!why) { console.error("unjustified refresh"); }
     console.log("refreshing feed…", "#" + r.home.feed.target, "→"+why);
 
