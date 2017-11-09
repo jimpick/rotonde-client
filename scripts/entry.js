@@ -14,6 +14,35 @@ function Entry(data,host)
 
   this.is_seed = this.host ? r.home.portal.json.port.indexOf(this.host.url) > -1 : false;
 
+  this.element = null;
+  this.element_html = null;
+
+  this.to_element = function(timeline, c, cmin, cmax)
+  {
+    if (c < cmin || cmax <= c) {
+      // Out of bounds - remove if existing, don't add.
+      if (this.element != null)
+          timeline.removeChild(this.element);
+      this.element = null;
+      this.element_html = null;
+      return null;
+    }
+
+    var html = this.to_html();
+    if (this.element_html != html) {
+      if (this.element == null) {
+        // Thin wrapper required.
+        this.element = document.createElement('div');
+        this.element.className = 'thin-wrapper';
+      }
+      this.element.innerHTML = html;
+      this.element_html = html;
+    }
+    // Always append as last.
+    timeline.appendChild(this.element);
+    return this.element;
+  }
+
   this.to_json = function()
   {
     return {message:this.message,timestamp:this.timestamp,editstamp:this.editstamp,media:this.media,target:this.target,ref:this.ref,quote:this.quote,whisper:this.whisper};
@@ -21,13 +50,6 @@ function Entry(data,host)
 
   this.to_html = function()
   {
-    this.is_mention = false;
-    for(i in this.target){
-      if(to_hash(this.target[i]) == to_hash(r.home.portal.url)){
-        this.is_mention = true;
-        break;
-      }
-    }
     var html = "";
 
     html += this.icon();
@@ -219,6 +241,24 @@ function Entry(data,host)
     while(m.indexOf("{-") > -1 && m.indexOf("-}") > -1){
       m = m.replace('{-',"<del>").replace('-}',"</del>");
     }
+    var il;
+    var ir;
+    while((il = m.indexOf("{%")) > -1 && (ir = m.indexOf("%}")) > -1){
+      var left = m.substring(0, il);
+      var mid = m.substring(il + 2, ir);
+      var right = m.substring(ir + 2);
+
+      var origin = this.quote && this.target ? this.target : this.host.url;
+      var src = origin + '/media/content/inline/' + mid;
+
+      if (src.indexOf('.') == -1) {
+          src = src + '.png'; // Default extension: .png
+      } else {
+          mid = mid.substring(0, mid.lastIndexOf('.'));
+      }
+      
+      m = `${left}<img class="inline" src="${r.escape_attr(src)}" alt="" title="${r.escape_attr(mid)}" />${right}`;
+    }
     return m
   }
 
@@ -230,10 +270,7 @@ function Entry(data,host)
   this.is_visible = function(filter = null,feed_target = null)
   {
     if(feed_target == "mentions"){
-      feed_target = null;
-      if(! this.is_mention){
-        return false;
-      }
+      return this.is_mention;
     }
     if(this.whisper && this.host.json.name != r.home.portal.json.name){
       for(url in this.target){
@@ -263,7 +300,11 @@ function Entry(data,host)
           }
       }
 
-      if(this.message.toLowerCase().indexOf(r.home.portal.json.name) > -1){
+      // Mention tag, eg '@dc'
+      const mentionTag = '@' + r.home.portal.json.name
+      const msg = this.message.toLowerCase()
+      // We want to match messages containing @dc, but NOT ones containing eg. @dcorbin
+      if(msg.endsWith(mentionTag) || msg.indexOf(mentionTag + ' ') > -1) {
         im = true;
       }
       for(var i in this.target){
@@ -274,11 +315,10 @@ function Entry(data,host)
       }
     }
 
-    if(im){
-      r.home.feed.mentions += 1;
-    }
     return im;
   }
+
+  this.is_mention = this.detect_mention()
 }
 
 function timeSince(date)
