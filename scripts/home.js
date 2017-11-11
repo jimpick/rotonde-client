@@ -27,6 +27,8 @@ function Home()
   this.discovery_page_size = 16;
   this.discovering = -1;
 
+  this.display_log = true;
+
   this.install = function()
   {
     r.el.appendChild(r.home.el);
@@ -37,7 +39,7 @@ function Home()
     r.home.logo_el.title = r.home.portal.json.client_version;
     r.home.version_el.textContent = r.home.portal.json.client_version;
 
-    setInterval(r.home.discover, 4000);
+    // setInterval(r.home.discover, 4000);
   }
 
   this.update = function()
@@ -121,9 +123,19 @@ function Home()
 
   }
 
-  this.log = function(text)
+  this.log = function(text, life)
   {
-    r.operator.input_el.setAttribute("placeholder",text);
+    if (this.display_log) {
+      if (life && life !== 0) {
+        this.display_log = false;
+        var t = this;
+        setTimeout(function() {
+            t.display_log = true;
+        }, life);
+      }
+
+      r.operator.input_el.setAttribute("placeholder",text);
+    }
   }
 
   this.collect_network = function()
@@ -159,13 +171,15 @@ function Home()
     await archive.writeFile('/portal.json', JSON.stringify(this.portal.json, null, 2));
     await archive.commit();
 
-    this.portal.refresh("saved");
+    // this.portal.refresh("saved");
     this.update();
-    r.home.feed.refresh("saved");
+    r.home.feed.refresh("delay: saved");
   }
 
   this.discover = async function()
   {
+    return; // This is currently too resource intensive.
+    
     // Discovery supports discovering while the feed is loading.
     // if (r.home.feed.queue.length > 0)
       // return;
@@ -184,36 +198,37 @@ function Home()
   this.discover_next = function(portal)
   {
     setTimeout(r.home.discover_next_step, 250);
-    
+
     if (!portal) {
+      r.home.discover_next_step();
       return;
     }
 
     r.home.discovered_hashes = r.home.discovered_hashes.concat(portal.hashes());
-    
+
     if (portal.is_known(true)) {
+      r.home.discover_next_step();
       return;
     }
-    
+
     r.home.discovered.push(portal);
     r.home.update();
     r.home.feed.refresh("discovery");
+    setTimeout(r.home.discover_next_step, 250);
   }
-  
   this.discover_next_step = function()
   {
     var url;
-    while (r.home.discovering < r.home.network.length - 1 &&
+    while (!url && r.home.discovering < r.home.network.length - 1 &&
            has_hash(r.home.discovered_hashes,
              (url = r.home.network[++r.home.discovering])
              .replace("dat://","").replace("/","").trim()
            )) { }
 
-    if (r.home.discovering >= r.home.network.length) {
+    if (r.home.discovering >= r.home.network.length - 1) {
       r.home.discovering = -1;
       return;
     }
-        
     try {
       var portal = new Portal(url);
       portal.discover();

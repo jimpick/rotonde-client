@@ -1,7 +1,7 @@
 function Rotonde(client_url)
 {
   this.client_url = client_url;
-  this.client_version = "0.1.81";
+  this.client_version = "0.1.9";
 
   // SETUP
 
@@ -109,7 +109,6 @@ function Rotonde(client_url)
     e.preventDefault();
 
     r.operator.inject(e.target.getAttribute("data-operation"));
-    window.scrollTo(0, 0);
     if(!e.target.getAttribute("data-validate")){ return; }
     r.operator.validate();
   }

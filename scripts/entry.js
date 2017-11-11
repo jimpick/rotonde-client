@@ -123,9 +123,9 @@ function Entry(data,host)
         this.media += ".jpg";
         extension = "jpg";
       } // support og media uploads
-      audiotypes = ["mp3", "ogg", "wav"];
-      videotypes = ["mp4", "webm"]; // "ogg",
-      imagetypes = ["apng", "bmp", "dib", "gif", "jpg", "jpeg", "jpe", "png", "svg", "svgz", "tiff", "tif", "webp"];
+      audiotypes = ["m4a", "mp3", "oga", "ogg", "opus"];
+      videotypes = ["mp4", "ogv", "webm"];
+      imagetypes = ["apng", "gif", "jpg", "jpeg", "jpe", "png", "svg", "svgz", "tiff", "tif", "webp"];
 
       var origin = this.quote && this.target ? this.target : this.host.url;
 
@@ -145,7 +145,9 @@ function Entry(data,host)
     if(this.quote){
       return "+";
     }
-    if(this.target){
+    if(this.target && this.target.length != 0){
+      // Fun fact: this.target.length != 0 works for strings ("".length == 0),
+      // but also for arrays ([].length == 0).
       return ":";
     }
     return "";
@@ -269,23 +271,25 @@ function Entry(data,host)
 
   this.is_visible = function(filter = null,feed_target = null)
   {
-    if(feed_target == "mentions"){
-      return this.is_mention;
-    }
     if(this.whisper){
-      for(url in this.target){
-        if(has_hash(r.home.portal.hashes(), url)){
-          return true;
-        }
-      }
-      return false;
+      if (!has_hash(r.home.portal.hashes(), this.target))
+        return false;
     }
+    
     if(filter && this.message.indexOf(filter) < 0){
       return false;
+    }
+
+    if(feed_target == "mentions"){
+      return this.is_mention && !this.whisper;
+    }
+    if(feed_target == "whispers"){
+      return this.whisper;
     }
     if(feed_target && feed_target != this.host.json.name){
       return false;
     }
+
     return true;
   }
 
@@ -308,13 +312,7 @@ function Entry(data,host)
       if(msg.endsWith(mentionTag) || msg.indexOf(mentionTag + ' ') > -1) {
         im = true;
       }
-      var hashes = r.home.portal.hashes();
-      for(var i in this.target){
-        if(has_hash(hashes, this.target[i])){
-          im = true;
-          break;
-        }
-      }
+      im = im || has_hash(r.home.portal.hashes(), this.target);
     }
 
     return im;
