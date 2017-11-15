@@ -101,9 +101,12 @@ function Feed(feed_urls)
     }
 
     this.portals.push(portal);
-    var activity = portal.archive.createFileActivityStream("portal.json");
-    activity.addEventListener('changed', e => {
-      r.home.feed.refresh(portal.json.name+" changed");
+    var activity = portal.archive.createFileActivityStream();
+    activity.addEventListener("invalidated", e => {
+      portal.refresh().then(() => {
+        r.home.update();
+        r.home.feed.refresh(portal.json.name+" refreshed");
+      });
     });
     r.home.update();
     r.home.feed.refresh(portal.json.name+" registered");
@@ -155,7 +158,7 @@ function Feed(feed_urls)
           await portal.refresh();
         }
         r.home.feed.refresh('delayed: ' + why);
-      }, 250);
+      }, 750);
       return;
     }    
     if(!why) { console.error("unjustified refresh"); }
