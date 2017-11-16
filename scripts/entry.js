@@ -88,7 +88,12 @@ function Entry(data,host)
 
   this.icon = function()
   {
-    return "<a href='"+this.host.url+"'><img class='icon' src='"+this.host.url+"/media/content/icon.svg'></a>";
+    var title = r.escape_html(this.host.json.name);
+    var desc = r.escape_html(this.host.json.desc || "");
+    if (desc){
+        title += "\n" + desc;
+    }
+    return "<a href='"+this.host.url+"' title='"+ title +"'><img class='icon' src='"+this.host.url+"/media/content/icon.svg'></a>";
   }
 
   this.header = function()
@@ -114,15 +119,15 @@ function Entry(data,host)
 
     var operation = '';
     if(this.whisper)
-      operation = "whisper:"+this.host.json.name+" ";
+      operation = r.escape_attr("whisper:"+this.host.json.name+" ");
     else
-      operation = "quote:"+this.host.json.name+"-"+this.id+" ";
+      operation = r.escape_attr("quote:"+this.host.json.name+"-"+this.id+" ");
 
-    html += this.editstamp ? "<c class='editstamp' data-operation='"+r.escape_attr(operation)+"' title='"+this.localtime()+"'>edited "+timeSince(this.editstamp)+" ago</c>" : "<c class='timestamp' data-operation='"+operation+"' title='"+this.localtime()+"'>"+timeSince(this.timestamp)+" ago</c>";
+    html += this.editstamp ? "<c class='editstamp' data-operation='"+operation+"' title='"+this.localtime()+"'>edited "+timeSince(this.editstamp)+" ago</c>" : "<c class='timestamp' data-operation='"+operation+"' title='"+this.localtime()+"'>"+timeSince(this.timestamp)+" ago</c>";
     
     if(this.host.json.name == r.home.portal.json.name) {
-      var editOperation = 'edit:'+this.id+' '+this.message.replace(/\'/g,"&apos;");
-      html += " <c class='timestamp' data-operation='+editOperation+'>edit</c>"
+      var editOperation = r.escape_attr('edit:'+this.id+' '+this.message.replace(/\'/g,"&apos;"));
+      html += " <c class='timestamp' data-operation='"+editOperation+"'>edit</c>"
     }
 
     html += this.host.json.name == r.home.portal.json.name && r.is_owner ? "<t class='tools'><t data-operation='delete:"+this.id+"'>del</t></t>" : "";
@@ -252,7 +257,11 @@ function Entry(data,host)
       else if (word.search(/^https?:\/\//) != -1) {
         try {
           var url = new URL(word)
-          var compressed = word.substr(word.indexOf("://")+3,url.hostname.length + 15)+"..";
+          var cutoffLen = url.hostname.length + 15;
+          var compressed = word.substr(word.indexOf("://")+3);
+          if (compressed.length > cutoffLen) {
+            compressed = compressed.substr(0, cutoffLen)+"..";
+          }
           n.push("<a href='"+url.href+"'>"+compressed+"</a>");
         } catch(e) {
           console.error("Error when parsing url:", word, e);
@@ -263,7 +272,11 @@ function Entry(data,host)
         n.push(word)
       }
     }
-    return n.join(" ").trim();
+    m = n.join(" ").trim();
+    // formats descriptive [md style](https://guides.github.com/features/mastering-markdown/#examples) links
+    return m.replace(/{(.*?)\|(.*?)}/g, 
+      function replacer(m, p1, p2) { return `<a href="${p2}">${p1}</a>`}
+    )
   }
 
   this.highlight_portal = function(m)
