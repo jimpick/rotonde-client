@@ -125,12 +125,12 @@ function Entry(data,host)
 
     html += this.editstamp ? "<c class='editstamp' data-operation='"+operation+"' title='"+this.localtime()+"'>edited "+timeSince(this.editstamp)+" ago</c>" : "<c class='timestamp' data-operation='"+operation+"' title='"+this.localtime()+"'>"+timeSince(this.timestamp)+" ago</c>";
     
-    if(this.host.json.name == r.home.portal.json.name) {
-      var editOperation = r.escape_attr('edit:'+this.id+' '+this.message.replace(/\'/g,"&apos;"));
-      html += " <c class='timestamp' data-operation='"+editOperation+"'>edit</c>"
+    if(this.host.json.name == r.home.portal.json.name && r.is_owner) {
+      html += "<t class='tools'>";
+      html += "<c data-operation='delete:"+this.id+"'>del</c> ";
+      html += "<c data-operation='edit:"+this.id+" "+r.escape_attr(this.message)+"'>edit</c> ";
+      html += "</t>";
     }
-
-    html += this.host.json.name == r.home.portal.json.name && r.is_owner ? "<t class='tools'><t data-operation='delete:"+this.id+"'>del</t></t>" : "";
 
     return html+"<hr />";
   }
@@ -181,15 +181,15 @@ function Entry(data,host)
         media = media.substring("media%2Fcontent%2F".length);
       var parts = media.split(".")
       extension = parts[parts.length-1].toLowerCase();
-      if (parts.length === 1) {
+      if (parts.length === 1) { // support og media uploads
         media += ".jpg";
         extension = "jpg";
-      } // support og media uploads
+      }
       audiotypes = ["m4a", "mp3", "oga", "ogg", "opus"];
       videotypes = ["mp4", "ogv", "webm"];
       imagetypes = ["apng", "gif", "jpg", "jpeg", "jpe", "png", "svg", "svgz", "tiff", "tif", "webp"];
 
-      var origin = this.quote && this.target ? this.target : this.host.url;
+      var origin = this.thread_root().host.url;
       origin += origin.toString().slice(-1) == "/" ? "" : "/";
 
       if(audiotypes.indexOf(extension) > -1){ html += "<audio class='media' src='"+origin+"media/content/"+media+"' controls />"; }
@@ -361,7 +361,7 @@ function Entry(data,host)
     }
 
     if(feed_target == "mentions"){
-      return this.is_mention && !this.whisper;
+      return this.is_mention && !this.whisper && this.host.url != r.home.portal.url;
     }
     if(feed_target == "whispers"){
       return this.whisper;
@@ -393,6 +393,11 @@ function Entry(data,host)
   this.thread_length = function()
   {
     return this.quote ? this.quote.thread_length() + 1 : 0;
+  }
+
+  this.thread_root = function()
+  {
+    return this.quote ? this.quote.thread_root() : this;
   }
 
   this.is_mention = this.detect_mention()
