@@ -49,6 +49,7 @@ function Feed(feed_urls)
   
   this.queue = [];
   this.portals = [];
+  this.portal_rotonde = null;
 
   this.urls = {};
   this.filter = "";
@@ -79,6 +80,9 @@ function Feed(feed_urls)
   this.start = function()
   {
     this.queue = [r.home.portal.url].concat(r.home.portal.json.port);
+    
+    new Portal(r.client_url).connect_service();
+
     this.connect();
   }
 
@@ -430,8 +434,6 @@ function Feed(feed_urls)
     
     this.bigpicture_el.setAttribute("data-operation", "big");
     this.bigpicture_el.setAttribute("data-validate", "true");
-    this.bigpicture_el.children[0].setAttribute("data-operation", "big");
-    this.bigpicture_el.children[0].setAttribute("data-validate", "true");
 
     if (!refreshing)
       window.scrollTo(0, 0);
@@ -573,6 +575,8 @@ function has_hash(hashes_a, hashes_b)
 
 function portal_from_hash(url)
 {
+  if (url.length > 0 && url[0] == "$") return url;
+  
   var hash = to_hash(url);
 
   var portal = r.home.feed.get_portal(hash);

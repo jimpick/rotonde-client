@@ -8,6 +8,7 @@
   --rune-feed-quote: "+";
   --rune-feed-mention: ":";
 
+  --rune-portal-rotonde: "$";
   --rune-portal-self: "@";
   --rune-portal-both: "@";
   --rune-portal-follow: "~";
@@ -60,7 +61,7 @@ body #feed .entry .timestamp:hover { cursor:pointer; text-decoration: underline;
 body #feed .entry .editstamp { color:#ccc; font-size:10pt; }
 body #feed .entry .editstamp:hover { cursor:pointer; text-decoration: underline; }
 body #feed .entry .hashtag:hover { cursor:pointer; text-decoration: underline; }
-body #feed .entry .media { max-width: calc(100% - 30px); margin-top:15px; display:block; margin-bottom:15px; border-radius:4px; }
+body #feed .entry .media { display:block; border-radius:4px; max-width: calc(100% - 30px); max-height: 400px; margin-top:15px; margin-bottom:15px; margin-left: calc(50% - 15px); transform: translateX(-50%); }
 body #feed .entry .tools { display:none; float:right; margin-right:50px; margin-top:5px; }
 body #feed .entry .tools > * { color:#aaa; cursor:pointer; }
 body #feed .entry .tools > *:hover { color: black; text-decoration: underline; }
@@ -139,6 +140,7 @@ body #operator #icon:hover { opacity: 0.5 }
 .rune.rune-feed.rune-feed-quote:after { content: var(--rune-feed-quote); }
 .rune.rune-feed.rune-feed-mention:after { content: var(--rune-feed-mention); }
 
+.rune.rune-portal.rune-portal-rotonde:after { content: var(--rune-portal-rotonde); }
 .rune.rune-portal.rune-portal-self:after { content: var(--rune-portal-self); }
 .rune.rune-portal.rune-portal-both:after { content: var(--rune-portal-both); }
 .rune.rune-portal.rune-portal-follow:after { content: var(--rune-portal-follow); }
