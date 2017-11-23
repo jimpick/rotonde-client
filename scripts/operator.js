@@ -99,14 +99,9 @@ function Operator(el)
     this.update();
   }
 
-  this.commands = {};
-
-  this.commands.say = function(p)
+  this.send = function(message, data)
   {
-    var message = p.trim();
-    var media = null;
-
-    if(message == ""){ return; }
+    var media = "";
     // Rich content
     if(message.indexOf(" >> ") > -1){
       // encode the file names to allow for odd characters, like spaces
@@ -116,23 +111,34 @@ function Operator(el)
       message = message.split(" >> ")[0].trim();
     }
 
-    var data = {media:"", message:message, timestamp:Date.now(), target:[]};
-    if(media){
-      data.media = media;
-    }
+    data = data || {};
+    data.media = data.media || media;
+    data.message = data.message || message;
+    data.timestamp = data.timestamp || Date.now();
+    data.target = data.target || [];
+
     // handle mentions
     var exp = /([@~])(\w+)/g;
     var tmp;
     while((tmp = exp.exec(message)) !== null){
       var portals = r.operator.lookup_name(tmp[2]);
-      if(portals.length > 0){
+      if (portals.length > 0 && data.target.indexOf(portals[0].url) <= -1) {
         data.target.push(portals[0].url);
-      }else{
-        data.target.push("");
       }
     }
 
     r.home.add_entry(new Entry(data));
+  }
+
+  this.commands = {};
+
+  this.commands.say = function(p)
+  {
+    var message = p.trim();
+
+    if(!message){ return; }
+
+    r.operator.send(message);
   }
 
   this.commands.edit = function(p,option)
@@ -222,9 +228,8 @@ function Operator(el)
 
   this.commands.quote = function(p,option)
   {
-    var message = p;
-    var name = option.split("-")[0];
-    var ref = parseInt(option.split("-")[1]);
+    var message = p.trim();
+    var {name, ref} = r.operator.split_nameref(option);
 
     var portals = r.operator.lookup_name(name);
 
@@ -237,37 +242,25 @@ function Operator(el)
     if (target === r.client_url) {
       target = "$rotonde";
     }
-
-    var media = portals[0].json.feed[ref].media;
-
-    var data = {message:message,timestamp:Date.now(),quote:quote,target:target,ref:ref,media:media};
-
-    r.home.add_entry(new Entry(data));
-
-    r.home.save();
+    if (target === r.home.portal.url) {
+      target = quote.target[0];
+    }
+    r.operator.send(message, {quote:quote,target:[target],ref:ref,media:quote.media,whisper:quote.whisper});
   }
 
   this.commands.whisper = function(p,option)
   {
     var name = option;
     var portal = r.operator.lookup_name(name);
-    var target = portal[0].url;
-
-    var message = p;
-    var media = null;
-
-    // Rich content
-    if(message.indexOf(" >> ") > -1){
-      media = message.split(" >> ")[1].split(" ")[0].trim();
-      message = message.split(" >> ")[0].trim();
+    if (portals.length === 0) {
+      return;
     }
-
-    var data = {message:message,timestamp:Date.now(),media:media,target:target,whisper:true};
-    if(media){
-      data.media = media;
+    
+    var target = portals[0].url;
+    if (target === r.client_url) {
+      target = "$rotonde";
     }
-
-    r.home.add_entry(new Entry(data));
+    r.operator.send(p.trim(), {target:[target],whisper:true});
   }
 
   this.commands['++'] = function(p, option) {
@@ -362,8 +355,7 @@ function Operator(el)
 
   this.commands.expand = function(p, option)
   {
-    var name = option.split("-")[0];
-    var ref = parseInt(option.split("-")[1]);
+    var {name, ref} = r.operator.split_nameref(option);
 
     var portals = r.operator.lookup_name(name);
 
@@ -377,8 +369,7 @@ function Operator(el)
 
   this.commands.collapse = function(p, option)
   {
-    var name = option.split("-")[0];
-    var ref = parseInt(option.split("-")[1]);
+    var {name, ref} = r.operator.split_nameref(option);
 
     var portals = r.operator.lookup_name(name);
 
@@ -397,8 +388,7 @@ function Operator(el)
       return;
     }
 
-    var name = option.split("-")[0];
-    var ref = parseInt(option.split("-")[1]);
+    var {name, ref} = r.operator.split_nameref(option);
 
     var portals = r.operator.lookup_name(name);
 
@@ -631,6 +621,13 @@ function Operator(el)
       if(portal.json.name === name){ results.push(portal); }
     }
     return results;
+  }
+
+  this.split_nameref = function(option)
+  {
+    var index = option.lastIndexOf("-");
+    if (index < 0) return;
+    return { name: option.substring(0, index), ref: parseInt(option.substring(index + 1)) };
   }
 }
 
