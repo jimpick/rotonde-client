@@ -139,7 +139,11 @@ function Feed(feed_urls)
       return;
     }
 
-    var url = r.home.feed.queue[0];
+    var entry = r.home.feed.queue[0];
+    var url = entry;
+    if (entry.url) {
+      url = entry.url;
+    }
 
     r.home.feed.queue = r.home.feed.queue.slice(1);
 
@@ -151,7 +155,12 @@ function Feed(feed_urls)
       r.home.feed.next();
       return;
     }
-    portal.connect()
+
+    if (entry.oncreate)
+      portal.fire(entry.oncreate);
+    if (entry.onparse)
+      portal.onparse.push(entry.onparse);
+    portal.connect();
     r.home.feed.update_log();
   }
 
@@ -175,6 +184,10 @@ function Feed(feed_urls)
     var hashes = portal.hashes();
     for (var id in hashes) {
       this.__get_portal_cache__[hashes[id]] = portal;      
+    }
+
+    if (!portal.is_remote) {
+      portal.load_remotes();
     }
 
     // Invalidate the collected network cache and recollect.
@@ -262,6 +275,8 @@ function Feed(feed_urls)
           var portal = r.home.feed.portals[id];
           await portal.refresh();
         }
+        if (r.home.feed.portal_rotonde)
+          await r.home.feed.portal_rotonde.connect_service();
         r.home.feed.refresh('delayed: ' + why);
       }, 750);
       return;
@@ -283,7 +298,9 @@ function Feed(feed_urls)
       var portal = r.home.feed.portals[id];
       entries.push.apply(entries, portal.entries());
     }
-
+    if (r.home.feed.portal_rotonde)
+      entries.push.apply(entries, r.home.feed.portal_rotonde.entries());
+    
     this.mentions = 0;
     this.whispers = 0;
 
@@ -319,7 +336,7 @@ function Feed(feed_urls)
     }
 
     var now = new Date();
-    var entries_now = new Set();
+    var entries_now = [];
     for (id in sorted_entries){
       var entry = sorted_entries[id];
 
@@ -338,7 +355,7 @@ function Feed(feed_urls)
         c = -2;
       var elem = !entry ? null : entry.to_element(timeline, c, cmin, cmax, coffset);
       if (elem != null) {
-        entries_now.add(entry);
+        entries_now.push(entry);
       }
       if (c >= 0)
         ca++;
@@ -347,7 +364,7 @@ function Feed(feed_urls)
     // Remove any "zombie" entries - removed entries not belonging to any portal.
     for (id in this.entries_prev) {
       var entry = this.entries_prev[id];
-      if (entries_now.has(entry))
+      if (entries_now.indexOf(entry) > -1)
         continue;
       entry.remove_element();
     }
@@ -457,179 +474,6 @@ function Feed(feed_urls)
     this.is_bigpicture = false;
   }
 
-}
-
-function to_hash(url)
-{
-  if (!url)
-    return null;
-
-  // This is microoptimized heavily because it's called often.
-  // "Make slow things fast" applies here, but not literally:
-  // "Make medium-fast things being called very often even faster."
-  
-  if (
-    url.length > 6 &&
-    url[0] == 'd' && url[1] == 'a' && url[2] == 't' && url[3] == ':'
-  )
-    // We check if length > 6 but remove 4.
-    // The other 2 will be removed below.
-    url = url.substring(4);
-  
-  if (
-    url.length > 2 &&
-    url[0] == '/' && url[1] == '/'
-  )
-    url = url.substring(2);
-
-  var index = url.indexOf("/");
-  url = index == -1 ? url : url.substring(0, index);
-
-  url = url.toLowerCase().trim();
-  return url;
-}
-
-function has_hash(hashes_a, hashes_b)
-{
-  // Passed a portal (or something giving hashes) as hashes_a or hashes_b.
-  var set_a = hashes_a instanceof Set ? hashes_a : null;
-  if (hashes_a) {
-    if (typeof(hashes_a.hashes_set) === "function")
-      set_a = hashes_a.hashes_set();
-    if (typeof(hashes_a.hashes) === "function")
-      hashes_a = hashes_a.hashes();
-  }
-
-  var set_b = hashes_b instanceof Set ? hashes_b : null;
-  if (hashes_b) {
-    if (typeof(hashes_b.hashes_set) === "function")
-      set_b = hashes_b.hashes_set();
-    if (typeof(hashes_b.hashes) === "function")
-      hashes_b = hashes_b.hashes();
-  }
-
-  // Passed a single url or hash as hashes_b. Let's support it for convenience.
-  if (typeof(hashes_b) === "string") {
-    var hash_b = to_hash(hashes_b);
-
-    if (set_a)
-       // Assuming that set_a is already filled with pure hashes...
-      return set_a.has(hash_b);
-
-    for (var a in hashes_a) {
-      var hash_a = to_hash(hashes_a[a]);
-      if (!hash_a)
-        continue;
-  
-      if (hash_a === hash_b)
-        return true;
-    }
-  }
-
-  if (set_a) {
-    // Fast path: set x iterator
-    for (var b in hashes_b) {
-      var hash_b = to_hash(hashes_b[b]);
-      if (!hash_b)
-        continue;
-
-      // Assuming that set_a is already filled with pure hashes...
-      if (set_a.has(hash_b))
-        return true;
-    }
-    return false;
-  }
-
-  if (set_b) {
-    // Fast path: iterator x set
-    for (var a in hashes_a) {
-      var hash_a = to_hash(hashes_a[a]);
-      if (!hash_a)
-        continue;
-
-      // Assuming that set_b is already filled with pure hashes...
-      if (set_b.has(hash_a))
-        return true;
-    }
-    return false;
-  }
-  
-  // Slow path: iterator x iterator
-  for (var a in hashes_a) {
-    var hash_a = to_hash(hashes_a[a]);
-    if (!hash_a)
-      continue;
-
-    for (var b in hashes_b) {
-      var hash_b = to_hash(hashes_b[b]);
-      if (!hash_b)
-        continue;
-
-      if (hash_a === hash_b)
-        return true;
-    }
-  }
-
-  return false;
-}
-
-function portal_from_hash(url)
-{
-  if (url.length > 0 && url[0] == "$") return url;
-  
-  var hash = to_hash(url);
-
-  var portal = r.home.feed.get_portal(hash);
-  if (portal)
-    return "@" + portal.json.name;
-  
-  return hash.substr(0,12)+".."+hash.substr(hash.length-3,2);
-}
-
-function create_rune(context, type)
-{
-  context = r.escape_attr(context);
-  type = r.escape_attr(type);
-  return `<i class='rune rune-${context} rune-${context}-${type}'></i>`;
-}
-
-function position_fixed(...elements)
-{
-  var all_bounds = [];
-  // Store all current bounds before manipulating the layout.
-  for (var id in elements) {
-    var el = elements[id];
-    var bounds = el.getBoundingClientRect();
-    bounds = { top: bounds.top, left: bounds.left, width: bounds.width };
-    // Workaround for Chromium (Beaker): sticky elements have wrong position.
-    // With the tabs element, bounds.top is 0, not 40, except when debugging...
-    if (window.getComputedStyle(el).getPropertyValue("position") === "sticky") {
-      el.style.position = "fixed";
-      bounds.top = el.getBoundingClientRect().top;
-      el.style.position = "";      
-    }
-    all_bounds[id] = bounds;
-  }
-  // Update the layout.
-  for (var id in elements) {
-    var el = elements[id];
-    var bounds = all_bounds[id];
-    el.style.position = "fixed";
-    el.style.top = bounds.top + "px";
-    el.style.left = bounds.left + "px";
-    el.style.width = bounds.width + "px";
-  }
-}
-
-function position_unfixed(...elements)
-{
-  for (var id in elements) {
-    var el = elements[id];
-    el.style.top = "";
-    el.style.left = "";
-    el.style.width = "";
-    el.style.position = "";
-  }
 }
 
 r.confirm("script","feed");
