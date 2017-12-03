@@ -1,11 +1,11 @@
 function Rotonde(client_url)
 {
   this.client_url = client_url;
-  this.client_version = "0.2.6";
+  this.client_version = "0.2.8";
 
   // SETUP
 
-  this.requirements = {style:["reset","fonts","main"],script:["util","home","portal","feed","entry","operator"]};
+  this.requirements = {style:["reset","fonts","main"],script:["util","home","portal","feed","entry","operator","oembed","status"]};
   this.includes = {script:[]};
   this.is_owner = false;
 
@@ -69,8 +69,8 @@ function Rotonde(client_url)
 
   this.home = null;
   this.portal = null;
-
   this.operator = null;
+  this.status = null;
 
   this.start = function()
   {
@@ -78,9 +78,11 @@ function Rotonde(client_url)
     document.body.appendChild(this.el);
     document.addEventListener('mousedown',r.mouse_down, false);
     document.addEventListener('keydown',r.key_down, false);
-    
+
     this.operator = new Operator();
     this.operator.install(this.el);
+    this.status = new Status();
+    this.status.install(this.el);
 
     this.home = new Home(); this.home.setup();
   }
@@ -102,7 +104,7 @@ function Rotonde(client_url)
       r.home.feed.bigpicture_hide();
     } else if (e.which === 116) { // F5
       r.operator.commands.portals_refresh();
-      r.home.update();      
+      r.home.update();
       r.home.feed.refresh("hit F5");
       e.preventDefault();
     }

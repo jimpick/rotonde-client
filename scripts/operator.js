@@ -8,6 +8,7 @@ function Operator(el)
   this.options_el = document.createElement('div'); this.options_el.id = "options"
   this.rune_el = document.createElement('div'); this.rune_el.id = "rune"
   this.icon_el = document.createElement('img'); this.icon_el.id = "icon" ; this.icon_el.src = "media/content/icon.svg"; this.icon_el.setAttribute("data-operation","clear_filter"); this.icon_el.setAttribute("data-validate","true");
+
   this.input_wrapper.appendChild(this.input_el);
   this.input_wrapper.appendChild(this.hint_el);
   this.input_wrapper.appendChild(this.rune_el)
@@ -16,7 +17,7 @@ function Operator(el)
   this.el.appendChild(this.options_el)
 
   this.name_pattern = new RegExp(/^@(\w+)/, "i");
-  this.keywords = ["filter","whisper","quote","edit","delete","page","++","--","help"];
+  this.keywords = ["filter","whisper","quote","edit","delete","pin","page","++","--","help"];
 
   this.cmd_history = [];
   this.cmd_index = -1;
@@ -32,7 +33,7 @@ function Operator(el)
     this.input_el.addEventListener('dragleave',r.operator.drag_leave, false);
     this.input_el.addEventListener('drop',r.operator.drop, false);
     this.input_el.addEventListener('paste',r.operator.paste, false);
-    
+
     this.options_el.innerHTML = "<t data-operation='page:1'>page</t> <t data-operation='filter keyword'>filter</t> <t data-operation='whisper:user_name message'>whisper</t> <t data-operation='quote:user_name-id message'>quote</t> <t data-operation='message >> media.jpg'>media</t> <t class='right' data-operation='edit:id message'>edit</t> <t class='right' data-operation='delete:id'>delete</t>";
 
     this.update();
@@ -193,7 +194,7 @@ function Operator(el)
 
     if (!r.home.portal.json.sameAs)
       r.home.portal.json.sameAs = [];
-    
+
     if (has_hash(r.home.portal.json.sameAs, remote))
       return;
 
@@ -255,7 +256,7 @@ function Operator(el)
 
   this.commands.delete = function(p,option)
   {
-    r.home.portal.json.feed.splice(option, 1)
+    r.home.portal.json.feed.splice(option, 1);
     r.home.save();
   }
 
@@ -295,6 +296,12 @@ function Operator(el)
     r.operator.send(message, {quote:quote,target:[target],ref:ref,media:quote.media,whisper:quote.whisper});
   }
 
+  this.commands.pin = function(p,option)
+  {
+      r.home.portal.json.pinned_entry = option;
+      r.home.save();
+  }
+
   this.commands.whisper = function(p,option)
   {
     var name = option;
@@ -302,7 +309,7 @@ function Operator(el)
     if (portals.length === 0) {
       return;
     }
-    
+
     var target = portals[0].url;
     if (target === r.client_url) {
       target = "$rotonde";
@@ -355,6 +362,9 @@ function Operator(el)
           }
           else if (command == "quote") {
               r.home.log('quote:user_name-id message', life);
+          }
+          else if (command == "pin") {
+              r.home.log('pin:id', life);
           }
           else if (command == "media") {
               r.home.log('message >> media.jpg', life);
@@ -426,6 +436,34 @@ function Operator(el)
 
     var entry = portals[0].entries()[ref];
     if (entry) entry.expanded = false;
+  }
+
+  this.commands.embed_expand = function(p, option)
+  {
+    var {name, ref} = r.operator.split_nameref(option);
+
+    var portals = r.operator.lookup_name(name);
+
+    if(portals.length === 0 || !portals[0].json.feed[ref]){
+      return;
+    }
+
+    var entry = portals[0].entries()[ref];
+    if (entry) entry.embed_expanded = true;
+  }
+
+  this.commands.embed_collapse = function(p, option)
+  {
+    var {name, ref} = r.operator.split_nameref(option);
+
+    var portals = r.operator.lookup_name(name);
+
+    if(portals.length === 0 || !portals[0].json.feed[ref]){
+      return;
+    }
+
+    var entry = portals[0].entries()[ref];
+    if (entry) entry.embed_expanded = false;
   }
 
   this.commands.big = function(p, option)
@@ -630,12 +668,12 @@ function Operator(el)
 
     if (!file)
       return;
-    
+
     if (typeof(file) === "string") {
       done(file);
       return;
     }
-    
+
     name = name || file.name;
     var reader = new FileReader();
     reader.onload = function (e) { done(e.target.result); };
