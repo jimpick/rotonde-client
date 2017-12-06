@@ -106,10 +106,10 @@ function Entry(data,host)
       html += "<div class='thread'>"+this.quote.thread(this.expanded, thread_id)+"</div>";
     }
     if(!this.quote || this.quote && this.expanded){
-      html += this.rmc();  
+      html += this.rmc();
     }
 
-    return "<div class='entry "+(this.whisper ? 'whisper' : '')+" "+(this.is_mention ? 'mention' : '')+"'>"+html+"<hr/></div>";
+    return "<div class='entry "+(this.whisper ? 'whisper' : '')+" "+(this.is_mention ? 'mention' : '')+" "+(this.quote ? 'quote' : '')+" "+(this.quote && !this.message ? 'bump' : '')+"'>"+html+"<hr/></div>";
   }
 
   this.icon = function()
@@ -161,9 +161,9 @@ function Entry(data,host)
       html += "<c data-operation='edit:"+this.id+" "+escape_attr(this.message)+"'>edit</c> ";
     }
     if(!this.whisper){
-      html += "<c data-operation='quote:"+escape_attr(this.host.json.name+"-"+this.id)+"'>quote</c> ";  
+      html += "<c data-operation='quote:"+escape_attr(this.host.json.name+"-"+this.id)+"'>quote</c> ";
     }
-    
+
     html += "</t>";
 
     return "<c class='head'>"+html+"</c>";
@@ -193,8 +193,8 @@ function Entry(data,host)
     else {
       html += "<t class='message' dir='auto'>"+this.icon()+"<a "+a_attr+"'>"+escape_html(portal_from_hash(this.host.url.toString()))+"</a> "+(this.formatter(this.message))+"</t>";
       var length = this.thread_length();
-      if(length > 0){
-        html += "<t class='expand down' data-operation='expand:"+thread_id+"' data-validate='true'>Expand "+(length+1)+" entries</t>";
+      if(length > 0 || this.media){
+        html += "<t class='expand down' data-operation='expand:"+thread_id+"' data-validate='true'>"+(length > 0 ? "Expand "+(length+1)+" Entries" : "Expand Entry")+"</t>";
       }
     }
     return html;
@@ -275,6 +275,9 @@ function Entry(data,host)
   {
     if(this.whisper){
       return "whispered";
+    }
+    if(this.quote && !this.message){
+      return "bumped";
     }
     if(this.quote){
       return "quoted";
