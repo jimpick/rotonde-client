@@ -270,9 +270,9 @@ function Home()
     if (!r.home.discovery_enabled)
       return;
 
-    // Discovery supports discovering while the feed is loading.
-    // if (r.home.feed.queue.length > 0)
-      // return;
+    // Don't discover while the main feed is loading.
+    if (r.home.feed.queue.length > 0)
+      return;
 
     // If already discovering, let the running discovery finish first.
     if (r.home.discovering_loops >= r.home.discovering_loops_max) {
@@ -294,7 +294,8 @@ function Home()
 
     portal.hashes().forEach(r.home.discovered_hashes.add, r.home.discovered_hashes);
 
-    if (portal.is_known(true)) {
+    if (portal.is_known(true) ||
+        (portal.json.discoverable === false /*not null, not undefined, just false*/)) {
       r.home.discover_next_step();
       return;
     }

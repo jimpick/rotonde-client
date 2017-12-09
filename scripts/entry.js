@@ -40,14 +40,6 @@ function Entry(data,host)
     }
 
     this.is_seed = this.host && has_hash(r.home.portal.json.port, this.host.url);
-
-    setTimeout(() => this.detect_embed().then(e => {
-      // If no embed was ever found, return.
-      if (!this.embed && !e) return;
-      // If no embed was found before, found now or if both embeds mismatch, update.
-      if (!this.embed || !e || this.embed.url !== e.url) r.home.feed.refresh("embed in post updated");
-      this.embed = e;
-    }), 0);
   }
   this.update(data, host);
 
@@ -61,6 +53,19 @@ function Entry(data,host)
   {
     var html = "";
 
+    var embed_needs_refresh = false; // Helpful when the detect_embed promise resolves immediately.
+    this.detect_embed().then(e => {
+      // If no embed was ever found, return.
+      if (!this.embed && !e) return;
+      // If no embed was found before, found now or if both embeds mismatch, update.
+      var refresh = !this.embed || !e || this.embed.url !== e.url;
+      this.embed = e;
+      if (refresh && embed_needs_refresh) {
+        // If embed updated and promise resolved too late, trigger feed refresh.
+        r.home.feed.refresh("embed in post updated");
+      }
+    });
+
     html += this.icon();
     html += this.header();
     html += this.body();
@@ -69,6 +74,7 @@ function Entry(data,host)
       html += "<div class='thread'>"+this.quote.thread(this.expanded, thread_id)+"</div>";
     }
     if(!this.quote || this.quote && this.expanded || this.quote && !this.message){
+      embed_needs_refresh = true;
       html += this.rmc();
     }
 
@@ -93,16 +99,16 @@ function Entry(data,host)
 
     var a_attr = "href='"+this.host.url+"'";
     if (this.host.url === r.client_url || this.host.url === "$rotonde") {
-      a_attr = "style='cursor: pointer;' data-operation='filter:"+this.host.json.name+"'";
+      a_attr = "style='cursor: pointer;' data-operation='filter:"+escape_attr(this.host.json.name)+"'";
     }
-    html += this.topic ? "<a data-operation='filter "+this.topic.toLowerCase()+"' class='topic'>#"+this.topic+"</a>" : "";
+    html += this.topic ? "<a data-operation='filter #"+escape_attr(this.topic.toLowerCase())+"' class='topic'>#"+escape_html(this.topic)+"</a>" : "";
     html += "<t class='portal'><a "+a_attr+">"+this.host.relationship()+escape_html(this.host.json.name)+"</a> "+this.action()+" ";
 
     for(i in this.target){
       if(this.target[i]){
         var a_attr = "href='" + escape_attr(this.target[i]) + "'";
         if (this.target[i] === r.client_url || this.target[i] === "$rotonde") {
-          a_attr = "style='cursor: pointer;' data-operation='filter:"+this.host.json.name+"'";
+          a_attr = "style='cursor: pointer;' data-operation='filter:"+escape_attr(this.host.json.name)+"'";
         }
         html += "<a "+a_attr+">" + escape_html(portal_from_hash(this.target[i].toString())) + "</a>";
       }else{
@@ -147,7 +153,7 @@ function Entry(data,host)
       html += this.icon();
       var a_attr = "href='"+this.host.url+"'";
       if (this.host.url === r.client_url || this.host.url === "$rotonde") {
-        a_attr = "style='cursor: pointer;' data-operation='filter:"+this.host.json.name+"'";
+        a_attr = "style='cursor: pointer;' data-operation='filter:"+escape_attr(this.host.json.name)+"'";
       }
       html += "<t class='message' dir='auto'><a "+a_attr+"'>"+escape_html(portal_from_hash(this.host.url.toString()))+"</a> "+(this.formatter(this.message))+"</t></div>";
       if(this.quote){ html += this.quote.thread(recursive, thread_id); }
@@ -225,7 +231,7 @@ function Entry(data,host)
   this.rmc_bigpicture = function(origin, media, tag, classes = "media", extra = "", inner = "", href = "")
   {
     return this.rmc_element(origin, href || media, "a", "thin-wrapper", "onclick='return false' target='_blank'",
-      this.rmc_element(origin, media, tag, classes, extra + " data-operation='big:"+this.host.json.name+"-"+this.id+"' data-validate='true'", inner)
+      this.rmc_element(origin, media, tag, classes, extra + " data-operation='big:"+escape_attr(this.host.json.name)+"-"+this.id+"' data-validate='true'", inner)
     );
   }
 
@@ -237,7 +243,7 @@ function Entry(data,host)
   this.action = function()
   {
     if(this.whisper){
-      return "whispered";
+      return "whispered to";
     }
     if(this.quote && !this.message){
       return "bumped";
@@ -515,8 +521,9 @@ function Entry(data,host)
     return false;
   }
 
-
   this.__detecting_embed__ = null;
+  this.__detected_embed_message__ = null;
+  this.__detected_embed__ = null;
   this.detect_embed = function() { return this.__detecting_embed__ || (this.__detecting_embed__ = (async () => {
     if (this.media) {
       this.__detecting_embed__ = null;
@@ -524,6 +531,12 @@ function Entry(data,host)
     }
 
     var m = this.message;
+
+    if (m === this.__detected_embed_message__) {
+      return this.__detected_embed__;
+    }
+    this.__detected_embed_message__ = m;
+
     var space, embed;
     // c: current char index
     for (var c = 0; c < m.length; c = space + 1) {
@@ -562,9 +575,9 @@ function Entry(data,host)
 
     }
 
-    var embed = this.quote ? await this.quote.detect_embed() : null;
+    var embed = this.quote && this.quote.detect_embed ? await this.quote.detect_embed() : null;
     this.__detecting_embed__ = null;
-    return embed;
+    return this.__detected_embed__ = embed;
   })())}
 
   this.thread_length = function()

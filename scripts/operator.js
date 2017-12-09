@@ -111,7 +111,7 @@ function Operator(el)
       // Encoding the URI needs to happen here.
       // We can't encode it in entry.rmc as that'd break previously encoded URIs.
       media = encodeURIComponent(message.substring(indexOfMedia + 2).trim());
-      message = message.substring(indexOfMedia).trim();
+      message = message.substring(0, indexOfMedia).trim();
     }
 
     data = data || {};
@@ -154,6 +154,15 @@ function Operator(el)
     }
     else if(option == "site"){
       r.home.portal.json.site = r.operator.validate_site(p);
+    }
+    else if(option == "discoverable"){
+      p = p && p.toLowerCase().trim();
+      if (!p || p === "true" || p === "y" || p === "yes")
+        r.home.portal.json.discoverable = true;
+      else if (p === "false" || p === "n" || p === "no")
+        r.home.portal.json.discoverable = false;
+      else
+        throw new Error("edit:discoverable doesn't support option " + p);
     }
     else{
       r.home.portal.json.feed[option].message = p;
@@ -734,6 +743,13 @@ function Operator(el)
     for(var url in r.home.feed.portals){
       var portal = r.home.feed.portals[url];
       if(portal.json.name === name){ results.push(portal); }
+    }
+    if (results.length === 0) {
+      // If no results found at all, try searching discovered portals.
+      for(var url in r.home.discovered){
+        var portal = r.home.discovered[url];
+        if(portal.json.name === name){ results.push(portal); }
+      }
     }
     return results;
   }
