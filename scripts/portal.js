@@ -17,7 +17,7 @@ function Portal(url)
     this.icon = r.client_url.replace(/\/$/, "") + "/media/logo.svg";
   }
 
-  this.archive = new DatArchive(this.url);
+  this.archive = null; // Gets set on connection or start.
   // Resolve "masked" (f.e. hashbase) dat URLs to "hashed" (dat://0123456789abcdef/) one.
   DatArchive.resolveName(this.url).then(hash => {
     if (!hash) return;
@@ -62,7 +62,7 @@ function Portal(url)
   
   this.start = async function()
   {
-    await r.db.indexArchive(p.archive);
+    this.archive = await r.db.indexArchive(this.url);
     this.maintenance();
   }
 
@@ -106,8 +106,7 @@ function Portal(url)
         }
       }
       
-      if (last_timestamp)
-        p.last_timestamp = last_timestamp;
+      p.last_timestamp = last_timestamp;
 
       if (!this.fire("parse", record))
         throw new Error("onparse returned false!");    
@@ -117,6 +116,9 @@ function Portal(url)
 
   this.maintenance = async function()
   {
+    if (!(await this.archive.getInfo()).isOwner)
+      return;
+
     var record_me = await this.get();
 
     // Remove duplicate portals
@@ -148,9 +150,9 @@ function Portal(url)
     
     var record;
     try {
-      if (r.db.isSource(p.archive.url))
-        await r.db.unindexArchive(p.archive.url);
-      await r.db.indexArchive(p.archive);
+      if (p.archive && r.db.isSource(p.archive.url))
+        await r.db.unindexArchive(p.archive.url); // We want to force our own opts here.
+      p.archive = await r.db.indexArchive(p.archive || p.url, { watch: true });
       record = await p.get();
     } catch (err) {
       console.log('connection failed: ', p.url, err);
@@ -210,8 +212,9 @@ function Portal(url)
 
     var record;
     try {
-      if (!r.db.isSource(p.archive.url))
-        await r.db.indexArchive(p.archive, { watch: false });
+      if (!p.archive || !r.db.isSource(p.archive.url)) {
+        p.archive = await r.db.indexArchive(p.archive || p.url, { watch: false });
+      }
       record = await p.get();
     } catch (err) {
       // console.log('connection failed: ', p.url, err);
@@ -325,7 +328,7 @@ function Portal(url)
   {
     if (
       this.__hashes_urls__.url == this.url &&
-      this.__hashes_urls__.archive_url == this.archive.url &&
+      this.__hashes_urls__.archive_url == (this.archive ? this.archive.url : undefined) &&
       this.__hashes_urls__.dat == this.dat
     ) return; // URLs didn't update - use cached hashes.
 
@@ -333,7 +336,7 @@ function Portal(url)
     var hash;
     if (hash = to_hash(this.__hashes_urls__.url = this.url))
       hashes.push(hash);
-    if (hash = to_hash(this.__hashes_urls__.archive_url = this.archive.url))
+    if (hash = to_hash(this.__hashes_urls__.archive_url = (this.archive ? this.archive.url : undefined)))
       hashes.push(hash);
     if (hash = to_hash(this.__hashes_urls__.dat = this.dat))
       hashes.push(hash);

@@ -39,6 +39,14 @@ function escape_attr(m)
 
 // Transforms a given date into a human-readable string,
 // telling the user how far in the past the given date is. 
+
+function timeOffset(date) // Days
+{
+  var seconds = Math.floor((new Date() - date) / 1000);
+  var interval = Math.floor(seconds / 31536000);
+  return Math.floor(seconds / 86400);
+}
+
 function timeSince(date)
 {
   var seconds = Math.floor((new Date() - date) / 1000);
@@ -294,25 +302,6 @@ function assert(condition, message)
 {
   if (!condition)
     throw new Error(message);
-}
-
-// Wraps a given promise in another promise.
-// If the inner promise doesn't resolve / reject until the given
-// timeout, the wrapping promise automatically rejects with an error.
-function promiseTimeout(promise, timeout) {
-  return new Promise((resolve, reject) => {
-    var rejectout = setTimeout(() => reject(new Error("Promise hanging, timeout!")), timeout);
-    promise.then(
-      function() {
-        clearTimeout(rejectout);        
-        resolve.apply(this, arguments);
-      },
-      function() {
-        clearTimeout(rejectout);        
-        reject.apply(this, arguments);
-      }
-    );
-  });
 }
 
 r.confirm("script","util");

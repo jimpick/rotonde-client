@@ -1,11 +1,11 @@
 function Rotonde(client_url)
 {
   this.client_url = client_url;
-  this.client_version = "0.4.0";
+  this.client_version = "0.4.1";
 
   // SETUP
 
-  this.requirements = {style:["reset","fonts","main"],dep:["required"],script:["util","rdom","home","portal","feed","entry","operator","oembed","status"]};
+  this.requirements = {style:["reset","fonts","main"],dep:["rotondb"],script:["util","rdom","home","portal","feed","entry","operator","oembed","status"]};
   this.includes = {dep:[],script:[]};
   this.is_owner = false;
 
@@ -76,7 +76,7 @@ function Rotonde(client_url)
           record.followUrls = record.followUrls || record.follows.map(f => f.url); // Fritter format.
         }
         else if (record.port || record.followUrls)
-        {          
+        {
           record.followUrls = record.followUrls || record.port; // Rotonde legacy format.
 
           record.follows = record.followUrls.map(url => { // Names will be resolved on maintenance.
@@ -117,6 +117,21 @@ function Rotonde(client_url)
       },
       serialize(record)
       {
+
+        // This previously was in home.save
+        if (record.follows) {
+          var portals_updated = {};
+          for (var id in r.home.feed.portals){
+            var portal = r.home.feed.portals[id];
+            portals_updated[to_hash(portal.archive ? portal.archive.url : portal.url)] = portal.last_timestamp;
+          }
+          record.follows = record.follows.sort((a, b) => {
+            a = portals_updated[to_hash(a.url)] || 0;
+            b = portals_updated[to_hash(b.url)] || 0;
+            return b - a;
+          });
+        }
+
         return {
           name: record.name,
           bio: record.bio,

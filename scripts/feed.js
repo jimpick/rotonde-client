@@ -111,7 +111,7 @@ This is preferred if you're on a limited data plan. Make sure to {#disable_disco
     r.db.on("indexes-updated", r.home.feed.indexes_updated);
   }
 
-  this.indexes_updated = function(url, version) {
+  this.indexes_updated = function(url) {
     // Invalidate matching portal.
     for (var i in r.home.feed.portals) {
       var portal = r.home.feed.portals[i];
@@ -226,12 +226,14 @@ This is preferred if you're on a limited data plan. Make sure to {#disable_disco
     var follows = (await r.home.portal.get()).follows;
     for (var id = 0; id < follows.length; id++) {
       var port_url = follows[id].url;
-      if (port_url != portal.url) continue;
-      port_url = portal.archive.url || portal.url;
-      if (!port_url.endsWith("/"))
-        port_url = port_url + "/";
+      if (!has_hash(portal, port_url)) continue;
+      port_url = portal.archive ? portal.archive.url : portal.url;
+      port_url = "dat://"+to_hash(port_url)+"/";
       follows[id].name = portal.name;
       follows[id].url = port_url;
+      r.db.portals.update(r.home.portal.record_url, {
+        follows: follows
+      });
       break;
     }
 
@@ -254,7 +256,7 @@ This is preferred if you're on a limited data plan. Make sure to {#disable_disco
     r.home.collect_network(true);
 
     r.home.update();
-    r.home.feed.refresh_lazy(portal.name+" registered");
+    r.home.feed.refresh(portal.name+" registered");
   }
 
   this.__get_portal_cache__ = {};
