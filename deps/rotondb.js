@@ -66,6 +66,18 @@ RotonDBUtil = {
     return data;
   },
 
+  cloneRecord(record) {
+    // Ugly but functional.
+    var clone = JSON.parse(JSON.stringify(record));
+
+    // Copy over our toRecord functions.
+    clone.getRecordURL = record.getRecordURL;
+    clone.getRecordOrigin = record.getRecordOrigin;
+    clone.getIndexedAt = record.getIndexedAt;
+
+    return clone;
+  },
+
   getValue(record, key) {
     if (key.indexOf("+") !== -1) {
       var multi = [];
@@ -182,9 +194,10 @@ function RotonDB(name) {
   this._name = name;
 
   this.timeoutDir = 8000;
-  this.timeoutFile = 2000;
+  this.timeoutFile = 1000;
   this.delayWrite = 2000;
-  this.maxFetches = 15; // TODO: Increase (or even drop) once Beaker becomes more robust.
+  this.fetchCountMax = 15; // TODO: Increase (or even drop) once Beaker becomes more robust.
+  this.fetchRetriesMax = 3;
   
   this._defs = {};
 
@@ -440,30 +453,50 @@ function RotonDB(name) {
   }
 
   // TL;DR for this following fetch mess: Don't hammer Beaker with file requests.
-
   this._fetches = 0;
   this._fetchQueue = [];
-  this._fetchExec = function(fetch, resolve, reject) {
-    // fetch is a function generating the fetching promise, thus basically an async function.
+  this._fetchExec = function(fetchGen, resolve, reject, attempt) {
+    // fetchGen is a function generating the fetching promise, thus basically an async function.
     var db = this; // Used later because this there != this here.
 
-    if (this._fetches >= this.maxFetches) {
-      // fetch needs to be queued.
+    if (attempt === undefined)
+      attempt = 0;
+
+    if (this._fetches >= this.fetchCountMax) {
+      // Fetch needs to be queued.
       return new Promise((resolve, reject) => {
         // Return a promise and queue our new promise's resolve and rejects.
         // They will be called further down when it's the fetch's turn.
-        this._fetchQueue.push([ fetch, resolve, reject ]);
+        db._fetchQueue.push([ fetchGen, resolve, reject, attempt ]);
       });
     }
 
-    // fetch fits in our fetching budget.
+    // Fetch fits in our fetching budget.
     this._fetches++;
-    fetch = fetch();
+    var fetch = fetchGen();
     // Return the original promise; once it finishes, move on to the next queued fetch.
     // If this already was queued, invoke the queued resolve and reject from our proxy promise.
+
     fetch.then(
-      function () { db._fetchNext.call(db); if (resolve) resolve.apply(this, Array.prototype.slice.call(arguments)); },
-      function () { db._fetchNext.call(db); if (reject) reject.apply(this, Array.prototype.slice.call(arguments)); }
+      function () {
+        // Move to next and invoke any passed resolve.
+        db._fetchNext.call(db);
+        if (resolve)
+          resolve.apply(this, Array.prototype.slice.call(arguments));
+      },
+      function () {
+        attempt++;
+        if (attempt < db.fetchRetriesMax) {
+          // Retry.
+          db._fetchQueue.push([ fetchGen, resolve, reject, attempt ]);
+          db._fetchNext.call(db);
+        } else {
+          // We retried too often - reject.
+          db._fetchNext.call(db);
+          if (reject)
+            reject.apply(this, Array.prototype.slice.call(arguments));
+        }
+      }
     );
     return fetch;
   };
@@ -538,27 +571,28 @@ function RotonDBTable(db, name) {
       return archive.rdb.cache[path];
     
     var record;
-    var fetch = archive.rdb.fetching[path];
-    if (fetch) {
-      // Already fetching the same record.
-      record = await fetch;
-    } else {
-      // Start a "shared" fetch in case we end up fetching this concurrently.
-      // We create a fetching async function, send it through the _fetchExec queue
-      // and store the returned promise in the fetching map.
-      record = await (archive.rdb.fetching[path] = this._db._fetchExec(async () => {
-        try {
+    try {
+      var fetch = archive.rdb.fetching[path];
+      if (fetch) {
+        // Already fetching the same record.
+        record = await fetch;
+      } else {
+        // Start a "shared" fetch in case we end up fetching this concurrently.
+        // We create a fetching async function, send it through the _fetchExec queue
+        // and store the returned promise in the fetching map.
+        record = await (archive.rdb.fetching[path] = this._db._fetchExec(async () => {
           // TODO: archive.download can timeout even though the file exists.
           // if (!isAvailable)
             // await RotonDBUtil.promiseTimeout(archive.download(path), this._db.timeoutFile);
           return JSON.parse(await RotonDBUtil.promiseTimeout(archive.readFile(path, { timeout: this._db.timeoutFile }), this._db.timeoutFile));
-        } catch (e) {
-          console.error("Failed fetching",archive.url+path,e);
-          return undefined;
-        }
-      }));
+        }));
+      }
+    } catch (e) {
+      // toString because this can fail more than once at a time (concurrent fetch).
+      // Prevent the log from cluttering with the same error message.
+      console.error("Failed fetching "+archive.url+path+" "+e.stack);
+      archive.rdb.fetching[path] = undefined;
     }
-    archive.rdb.fetching[path] = undefined;
 
     if (!record) {
       this._ack(archive, path, undefined);
@@ -585,23 +619,31 @@ function RotonDBTable(db, name) {
     );
     if (index < 0) {
       this._records.push(record);
-      // TODO: Update indexed mappings.
     } else {
       // Check if existing record is older and replace.
       var other = this._records[index];
-      if (other.getIndexedAt() >= record.getIndexedAt())
+      // Don't compare >= as other can be === record when we update it.
+      if (other.getIndexedAt() > record.getIndexedAt())
         return false;
       this._records[index] = record;
-      // TODO: Update indexed mappings.
     }
+
+    // TODO: Update indexed mappings.
   }
 
-  this.get = function(urlOrKey, value) {
+  this.get = async function(urlOrKey, value) {
+    var record = undefined;
     if (value)
-      return this._getByKey(urlOrKey, value);
-    if (urlOrKey === ":origin")
-      return this._getByOrigin(value);
-    return this._getByURL(urlOrKey);
+      record = await this._getByKey(urlOrKey, value);
+    else if (urlOrKey === ":origin")
+      record = await this._getByOrigin(value);
+    else
+      record = await this._getByURL(urlOrKey);
+    
+    if (!record)
+      return undefined;
+    
+    return RotonDBUtil.cloneRecord(record);
   }
   this._getByURL = async function(url) {
     // Let's cheat a little.
@@ -706,7 +748,7 @@ function RotonDBTable(db, name) {
           continue;
         var record = await this._fetch(archive, path);
         if (record)
-          records.push(record);
+          records.push(RotonDBUtil.cloneRecord(record));
       }
     }
 
@@ -730,9 +772,7 @@ function RotonDBTable(db, name) {
   }
   this._updateByUpdates = async function(url, updates) {
     var record = await this._getByURL(url) || {};
-    for (var i in updates) {
-      record[i] = updates[i];
-    }
+    Object.assign(record, updates);
     try {
       await this.put(url, record);
       return 1;
