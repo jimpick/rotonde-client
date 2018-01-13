@@ -151,8 +151,9 @@ function Portal(url)
     var record;
     try {
       if (p.archive && r.db.isSource(p.archive.url))
-        await r.db.unindexArchive(p.archive.url); // We want to force our own opts here.
-      p.archive = await r.db.indexArchive(p.archive || p.url, { watch: true });
+        await r.db.watchArchive(p.archive.url);
+      else
+        p.archive = await r.db.indexArchive(p.archive || p.url, { watch: true });
       record = await p.get();
     } catch (err) {
       console.log('connection failed: ', p.url, err);
@@ -229,6 +230,7 @@ function Portal(url)
 
   // Cache entries when possible.
 
+  this.__entries_map__ = {};
   this.entries = async function()
   {
     if (this._.entries)
@@ -236,7 +238,7 @@ function Portal(url)
     
     var added = new Set();
     var entries = this._.entries = [];
-    var entries_map = this._.entries_map = {};
+    var entries_map = this.__entries_map__;
 
     var feed = (await this.get()).feed || [];
     feed = feed.concat(await r.db.feed.where(":origin").equals(p.archive.url).toArray());    
@@ -257,15 +259,17 @@ function Portal(url)
       entries_map[entry.id] = entry;
     }
 
+    // TODO: Remove stale entries from __entries_map__
+
     return entries;
   }
   this.entry = async function(id)
   {
     var entries = this.entries();
-    return this._.entries_map[id];
+    return this.__entries_map__[id];
   }
 
-  this.relationship = function(target = r.home.portal.hashes_set())
+  this.relationship = function(target = r.home.portal)
   {
     if (this.url === r.client_url) return create_rune("portal", "rotonde");
     if (has_hash(this, target)) return create_rune("portal", "self");
@@ -279,16 +283,14 @@ function Portal(url)
     return parseInt((Date.now() - this.last_timestamp)/1000);
   }
 
-  this.badge = async function(special_class)
+  this.badge = function(special_class)
   {
-    var record = await this.get();
-    var record_me = await r.home.portal.get();
     // Avoid 'null' class.
     special_class = special_class || '';
 
     var html = "";
 
-    html += "<img src='"+this.archive.url+"/media/content/icon.svg'/>";
+    html += "<img src='"+escape_attr(this.icon)+"'/>";
     html += "<a data-operation='"+this.url+"' href='"+this.url+"'>"+this.relationship()+escape_html(this.name)+"</a> ";
 
     html += "<br />"
@@ -300,23 +302,23 @@ function Portal(url)
 
     html += "<br />"
     // Version
-    if(record.rotonde_version){
+    if(this.rotonde_version){
       // Used to check if the rotonde version matches when mod version is present.
       var version_regex = /^[0-9.]+[a-z]?/;
-      var version_self = record_me.rotonde_version.match(version_regex);
-      var version_portal = record.rotonde_version.match(version_regex);
+      var version_self = r.home.portal.rotonde_version.match(version_regex);
+      var version_portal = this.rotonde_version.match(version_regex);
       var version_match =
         // Don't compare if either string doesn't contain a match.
         version_self &&
         version_portal &&
         version_self[0] == version_portal[0];
       // The version to display.
-      var version = escape_html(record.rotonde_version)
+      var version = escape_html(this.rotonde_version)
         .split(/\r\n|\n/).slice(0, 2).join("<br>"); // Allow 2 lines for mod versions
       html += "<span class='version "+(version_match ? 'same' : '')+"'>"+version+"</span>"
     }
 
-    html += "<span>"+record.follows.length+" Portals</span>"
+    html += "<span>"+this.follows.length+" Portals</span>"
 
     return "<yu class='badge "+special_class+"' data-operation='"+(special_class === "discovery"?"":"un")+this.url+"'>"+html+"</yu>";
   }
