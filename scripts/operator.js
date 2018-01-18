@@ -92,8 +92,8 @@ function Operator(el)
       result = await result;
 
     this.input_el.value = "";
-    r.home.update();
-    r.home.feed.refresh(command+" validated");
+    await r.home.update();
+    await r.home.feed.refresh(command+" validated");
   }
 
   this.inject = function(text)
@@ -288,9 +288,17 @@ function Operator(el)
   {
     await r.db.feed.delete(r.home.portal.archive.url + "/posts/" + option + ".json");
     // Delete entry from cache.
+    if (r.home.portal.__entries_buffered__) {
+      for (var i in r.home.portal.__entries_buffered__) {
+        if (r.home.portal.__entries_buffered__[i].id !== option)
+          continue;
+        r.home.portal.__entries_buffered__.splice(i, 1);
+        break;
+      }
+    }
     if (r.home.portal._.entries) {
       for (var i in r.home.portal._.entries) {
-        if (r.home.portal._.entries[i].id != option)
+        if (r.home.portal._.entries[i].id !== option)
           continue;
         r.home.portal._.entries.splice(i, 1);
         break;
@@ -320,7 +328,7 @@ function Operator(el)
     var portals = r.operator.lookup_name(name);
     if (portals.length === 0) return;
 
-    var quote = await portals[0].entry(ref);
+    var quote = await portals[0].entryBuffered(ref);
     if (!quote) return;
 
     var target = portals[0].url;
@@ -372,13 +380,13 @@ function Operator(el)
     });
   }
 
-  this.commands['++'] = function(p, option) {
-    r.operator.commands.page('++');
+  this.commands['++'] = async function(p, option) {
+    await r.operator.commands.page('++');
   }
-  this.commands['--'] = function(p, option) {
-    r.operator.commands.page('--');
+  this.commands['--'] = async function(p, option) {
+    await r.operator.commands.page('--');
   }
-  this.commands.page = function(p, option) {
+  this.commands.page = async function(p, option) {
     if (p === '' || p == null)
       p = option;
     if (p === '' || p == null)
@@ -397,7 +405,7 @@ function Operator(el)
       throw new Error('No valid parameter given for page command!');
     if (page < 0)
       page = 0;
-    r.home.feed.page_jump(page, false); // refresh = false, as we refresh again on command validation
+    await r.home.feed.page_jump(page, false); // refresh = false, as we refresh again on command validation
   }
 
   this.commands.help = function(p, option) {
@@ -469,7 +477,7 @@ function Operator(el)
     var portals = r.operator.lookup_name(name);
     if (portals.length === 0) return;
 
-    var entry = await portals[0].entry(ref);
+    var entry = await portals[0].entryBuffered(ref);
     if (!entry) return;
 
     entry.expanded = true;
@@ -482,7 +490,7 @@ function Operator(el)
     var portals = r.operator.lookup_name(name);
     if (portals.length === 0) return;
 
-    var entry = await portals[0].entry(ref);
+    var entry = await portals[0].entryBuffered(ref);
     if (!entry) return;
 
     entry.expanded = false;
@@ -495,7 +503,7 @@ function Operator(el)
     var portals = r.operator.lookup_name(name);
     if (portals.length === 0) return;
 
-    var entry = await portals[0].entry(ref);
+    var entry = await portals[0].entryBuffered(ref);
     if (!entry) return;
 
     entry.embed_expanded = true;
@@ -508,7 +516,7 @@ function Operator(el)
     var portals = r.operator.lookup_name(name);
     if (portals.length === 0) return;
 
-    var entry = await portals[0].entry(ref);
+    var entry = await portals[0].entryBuffered(ref);
     if (!entry) return;
 
     entry.embed_expanded = false;
@@ -526,7 +534,7 @@ function Operator(el)
     var portals = r.operator.lookup_name(name);
     if (portals.length === 0) return;
 
-    var entry = await portals[0].entry(ref);
+    var entry = await portals[0].entryBuffered(ref);
     if (!entry) return;
 
     entry.big();

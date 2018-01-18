@@ -2,11 +2,11 @@ function Portal(url)
 {
   var p = this;
 
-  this.url = url;
+  this.url = "dat://"+to_hash(url);
 
   this.name = "";
   this.desc = "";
-  this.icon = url.replace(/\/$/, "") + "/media/content/icon.svg";
+  this.icon = this.url + "/media/content/icon.svg";
   this.sameas = [];
   this.follows = [];
   this.discoverable = null;
@@ -29,6 +29,7 @@ function Portal(url)
   this._ = {};
   this.invalidate = function()
   {
+    this.__entries_buffered__ = this._.entries || this.__entries_buffered__;
     this._ = {};
   }
 
@@ -70,18 +71,18 @@ function Portal(url)
   {
     var record = this._.record;
     if (!record) {
-      record = this._.record = await r.db.portals.get(":origin", p.archive.url);
+      record = this._.record = await r.db.portals.get(":origin", p.url);
       if (!record)
-        throw new Error("Portal not found: " + p.archive.url);
+        throw new Error("Portal not found: " + p.url);
       this.record_url = record.getRecordURL();
 
       // Values for contexts unable to await get()
       p.name = record.name.replace(/ /g, "_");
       p.desc = record.bio;
       if (record.avatar) {
-        p.icon = p.archive.url + "/" + record.avatar;
+        p.icon = p.url + "/" + record.avatar;
       } else {
-        p.icon = p.archive.url + "/media/content/icon.svg"
+        p.icon = p.url + "/media/content/icon.svg"
       }
       p.sameas = record.sameas;
       p.follows = record.follows;
@@ -92,7 +93,7 @@ function Portal(url)
       var now = Date.now();
 
       var last = await r.db.feed.where(":origin+createdAt")
-        .between([p.archive.url, 0], [p.archive.url, now])
+        .between([p.url, 0], [p.url, now])
         .last();
       if (last)
         last_timestamp = last.createdAt;
@@ -116,7 +117,7 @@ function Portal(url)
 
   this.maintenance = async function()
   {
-    if (!(await this.archive.getInfo()).isOwner)
+    if (!r.is_owner)
       return;
 
     var record_me = await this.get();
@@ -144,17 +145,37 @@ function Portal(url)
         r.home.add_entry(new Entry(record_me.feed[i], this));
   }
 
+  this._connect = async function()
+  {
+    var record;
+
+    try {
+
+      // Check if we "know" the portal. Index and watch async.
+      record = await p.get();
+      if (p.archive && r.db.isSource(p.archive.url))
+        r.db.watchArchive(p.url);
+      else
+        r.db.indexArchive(p.archive || p.url, { watch: true }).then(_ => p.archive = _);
+
+    } catch (err) {
+
+      // We don't have any cached data - index and watch await, then get.
+      if (p.archive && r.db.isSource(p.archive.url))
+        await r.db.watchArchive(p.url);
+      else
+        p.archive = await r.db.indexArchive(p.archive || p.url, { watch: true });
+      record = await p.get();
+
+    }
+  }
+
   this.connect = async function()
   {
     console.log('connecting to: ', p.url);
     
-    var record;
     try {
-      if (p.archive && r.db.isSource(p.archive.url))
-        await r.db.watchArchive(p.archive.url);
-      else
-        p.archive = await r.db.indexArchive(p.archive || p.url, { watch: true });
-      record = await p.get();
+      await p._connect();
     } catch (err) {
       console.log('connection failed: ', p.url, err);
       r.home.feed.next();
@@ -163,6 +184,25 @@ function Portal(url)
 
     setTimeout(r.home.feed.next, r.home.feed.connection_delay);      
     await r.home.feed.register(p);
+  }
+
+  this.discover = async function()
+  {
+    this.is_discovered = true;
+
+    // console.log('connecting to: ', p.url);
+
+    try {
+      await p._connect();
+    } catch (err) {
+      // console.log('connection failed: ', p.url, err);
+      r.home.discover_next();
+      return;
+    }
+
+    setTimeout(r.home.feed.next, r.home.feed.connection_delay);      
+
+    r.home.discover_next(p);
   }
 
   this.load_remotes = async function() {
@@ -205,67 +245,102 @@ function Portal(url)
     r.home.feed.connect();
   }
 
-  this.discover = async function()
-  {
-    this.is_discovered = true;
+  this.__entries_buffered__ = [];
+  this.__entries_map__ = {}; // Cache entries when possible.
+  this.__entries_pending__ = null;
+  /* Warning! The entry query can take some time to resolve.
+   * Unfortunately, during that time, the feed can refresh multiple times.
+   * We previously returned this._.entries, further causing issues, as we
+   * manipulated it at the same time.
+   * 
+   * If an entry query is already pending, we now instead "block",
+   * which prevents the issues mentioned above from happening.
+   * 
+   * If you just want entries "now" and don't care about accuracy,
+   * use entriesBuffered instead.
+   */
+  this.__entries_ingest__ = function(raw, added, entries, entries_map) {
+    var timestamp = raw.createdAt || raw.timestamp;
+    if (added.has(timestamp)) return;
+    var entry = entries_map[timestamp];
+    if (!entry)
+      entries_map[timestamp] = entry = new Entry(raw, p);
+    else
+      entry.update(raw, p);
+    entry.is_mention = entry.detect_mention();
+    added.add(timestamp);
+    entries.push(entry);
+    entries_map[entry.id] = entry;
 
-    // console.log('connecting to: ', p.url);
-
-    var record;
-    try {
-      if (!p.archive || !r.db.isSource(p.archive.url)) {
-        p.archive = await r.db.indexArchive(p.archive || p.url, { watch: false });
-      }
-      record = await p.get();
-    } catch (err) {
-      // console.log('connection failed: ', p.url, err);
-      r.home.discover_next();
-      return;
-    }
-
-    setTimeout(r.home.feed.next, r.home.feed.connection_delay);      
-
-    r.home.discover_next(p);
+    // __entries_buffered__ is a different beast - we need to check the entry's existence manually.
+    var bufferedIndex = this.__entries_buffered__.indexOf(entry);
+    if (bufferedIndex === -1)
+      this.__entries_buffered__.push(entry);
+    // Note: We don't need to refresh, as buffered entries are shared via __entries_map__
   }
-
-  // Cache entries when possible.
-
-  this.__entries_map__ = {};
-  this.entries = async function()
-  {
+  this.entries = function() {
     if (this._.entries)
-      return this._.entries;
+      return (async () => this._.entries)();
     
-    var added = new Set();
-    var entries = this._.entries = [];
-    var entries_map = this.__entries_map__;
-
-    var feed = (await this.get()).feed || [];
-    feed = feed.concat(await r.db.feed.where(":origin").equals(p.archive.url).toArray());    
+    if (this.__entries_pending__)
+      return this.__entries_pending__;
     
-    var entry;
-    for (var id in feed) {
-      var raw = feed[id];
-      var timestamp = raw.createdAt || raw.timestamp;
-      if (added.has(timestamp)) continue;
-      entry = entries_map[timestamp];
-      if (!entry)
-        entries_map[timestamp] = entry = new Entry(raw, p);
-      else
-        entry.update(raw, p);
-      entry.is_mention = entry.detect_mention();
-      added.add(timestamp);
-      entries.push(entry);
-      entries_map[entry.id] = entry;
-    }
+    this.__entries_pending__ = (async () => {
+      var _ = this._; // We only want to cache our entries for the current _
+      // If this._ gets reset, we still return the "current" entries, but don't cache them.
+      var added = new Set();
+      var entries = [];
+      var entries_map = this.__entries_map__;
 
-    // TODO: Remove stale entries from __entries_map__
+      // Legacy feed: single feed array containing all posts.
+      var feed = (await this.get()).feed || [];
+      for (var id in feed) {
+        var raw = feed[id];
+        this.__entries_ingest__(raw, added, entries, entries_map);
+      }
 
-    return entries;
-  }
+      // New format feed: posts split into multiple files.
+      await r.db.feed.where(":origin").equals(p.url).forEach(raw => {
+        this.__entries_ingest__(raw, added, entries, entries_map);
+      });
+
+      // TODO: Remove stale entries from __entries_map__
+
+      _.entries = entries;
+
+      if (this.__entries_refresh__ && this._ === _) {
+        // We were rendering a subset of entries, f.e. via entriesBuffered,
+        // and want the feed to refresh lazily once entries() "finished."
+        this.__entries_refresh__ = false;
+        r.home.feed.refresh_lazy("entries() finished");
+      }
+
+      return entries;
+    })();
+
+    this.__entries_pending__.then(
+      () => this.__entries_pending__ = null,
+      () => this.__entries_pending__ = null
+    );
+    return this.__entries_pending__ || (async () => this._.entries)();
+  };
   this.entry = async function(id)
   {
-    var entries = this.entries();
+    var entries = await this.entries();
+    return this.__entries_map__[id];
+  }
+
+  // This function returns a "safe" but outdated subset of the entries.
+  this.entriesBuffered = async function() {
+    if (this._.entries)
+      return this._.entries;
+    this.__entries_refresh__ = true;
+    this.entries(); // Don't await - we need this to run concurrently to fill __entries_buffered__
+    return this.__entries_buffered__;
+  }
+  this.entryBuffered = async function(id)
+  {
+    var entries = await this.entriesBuffered();
     return this.__entries_map__[id];
   }
 

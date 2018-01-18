@@ -39,12 +39,13 @@ function Home()
   this.install = function()
   {
     r.el.appendChild(r.home.el);
-    r.home.update();
-    r.home.log("ready");
+    r.home.update().then(() => {
+      r.home.log("ready");
 
-    // Start discovering every 3 seconds.
-    // Note that r.home.discover returns immediately if enough discovery loops are running already.
-    setInterval(r.home.discover, 3000);
+      // Start discovering every 3 seconds.
+      // Note that r.home.discover returns immediately if enough discovery loops are running already.
+      setInterval(r.home.discover, 3000);
+    });
   }
 
   this.update = async function()
@@ -148,8 +149,12 @@ function Home()
       var portal = sorted_discovered[id];
 
       // Hide portals that turn out to be known after discovery (f.e. added afterwards).
-      if (portal.is_known())
+      if (portal.is_known()) {
+        var index = this.discovered.indexOf(portal);
+        if (index !== -1)
+          this.discovered.splice(index, 1);
         continue;
+      }
 
       // TODO: Allow custom discovery time filter.
       // if (portal.time_offset() / 86400 > 3)
@@ -244,8 +249,6 @@ function Home()
 
   this.discover = async function()
   {
-    // TODO: Stop discovery for now.
-    return;
     if (!r.home.discovery_enabled)
       return;
 
@@ -280,8 +283,7 @@ function Home()
     }
 
     r.home.discovered.push(portal);
-    r.home.update();
-    r.home.feed.refresh("discovery");
+    r.home.update().then(() => r.home.feed.refresh("discovery"));
     setTimeout(r.home.discover_next_step, 50);
   }
   this.discover_next_step = function()
@@ -312,7 +314,7 @@ function Home()
       break;
     }
 
-    if (r.home.discovering >= r.home.network.length) {
+    if (!url || r.home.discovering >= r.home.network.length) {
       r.home.discovering = -2;
       r.home.discovering_loops--;
       return;
