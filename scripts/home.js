@@ -1,6 +1,6 @@
 function Home()
 {
-  this.url = window.location.origin.toString();
+  this.url = localStorage.getItem("profile_archive") || window.location.origin.toString();
   this.network = [];
 
   this.setup = function()
@@ -12,6 +12,29 @@ function Home()
   this.setup_owner = async function()
   {
     await r.home.portal.archive.getInfo().then(archive => { r.is_owner = archive.isOwner; r.operator.update_owner(r.is_owner) });
+  }
+
+  this.select_archive = async function()
+  {
+    var archive = await DatArchive.selectArchive({
+      title: "Select Profile",
+      buttonLabel: "Login"
+    });
+    if (!archive)
+      return;
+      
+    if (has_hash([
+      window.location.origin.toString(),
+      await DatArchive.resolveName(window.location.origin.toString())
+    ], archive.url)) {
+      // Returning to our main profile.
+      localStorage.removeItem("profile_archive");
+    } else {
+      // Switching to another profile.
+      localStorage.setItem("profile_archive", archive.url);
+    }
+    // For now, the safest way to reset everything is to just reload the page.
+    window.location.reload();
   }
 
   this.el = document.createElement('div'); this.el.id = "portal";
@@ -253,7 +276,7 @@ function Home()
       return;
 
     // Don't discover while the main feed is loading.
-    if (r.home.feed.queue.length > 0)
+    if (r.home.feed.queue.length > 0 && localStorage.getItem("discovery_async") !== "true")
       return;
 
     // If already discovering, let the running discovery finish first.
