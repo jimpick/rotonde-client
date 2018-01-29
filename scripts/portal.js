@@ -7,7 +7,7 @@ function Portal(url)
   this.name = "";
   this.desc = "";
   this.icon = this.url + "/media/content/icon.svg";
-  this.sameas = [];
+  this.sameAs = [];
   this.follows = [];
   this.discoverable = null;
 
@@ -84,7 +84,7 @@ function Portal(url)
       } else {
         p.icon = p.url + "/media/content/icon.svg"
       }
-      p.sameas = record.sameas;
+      p.sameAs = record.sameAs;
       p.follows = record.follows;
       p.discoverable = record.discoverable;
       p.rotonde_version = record.rotonde_version;
@@ -117,7 +117,8 @@ function Portal(url)
 
   this.maintenance = async function()
   {
-    if (!r.is_owner)
+    // Too early to use r.is_owner
+    if (!(await this.archive.getInfo()).isOwner)
       return;
 
     var record_me = await this.get();
@@ -134,15 +135,19 @@ function Portal(url)
       follows.push({ name: name, url: "dat://"+hash+"/" });
     }
 
-    r.db.portals.update(record_me.getRecordURL(), {
+    var promises = [];
+
+    promises.push(r.db.portals.update(record_me.getRecordURL(), {
       follows: follows,
       rotonde_version: r.client_version
-    });
+    }));
 
     // Copy any legacy feed entries to /posts/
     if (record_me.feed && record_me.feed.length > 0)
       for (var i in record_me.feed)
-        r.home.add_entry(new Entry(record_me.feed[i], this));
+        promises.push(r.home.add_entry(new Entry(record_me.feed[i], this)));
+    
+    await Promise.all(promises);
   }
 
   this._connect = async function()
@@ -207,11 +212,11 @@ function Portal(url)
 
   this.load_remotes = async function() {
     var record_me = await p.get();
-    if (!record_me.sameas || record_me.sameas.length === 0) {
+    if (!record_me.sameAs || record_me.sameAs.length === 0) {
       return;
     }
 
-    var remotes = record_me.sameas.map((remote_url) => {
+    var remotes = record_me.sameAs.map((remote_url) => {
       return {
         url: remote_url,
         oncreate: function() {
@@ -232,8 +237,8 @@ function Portal(url)
               }
             }))
           }
-          if (this.sameas) {
-            return has_hash(this.sameas, p.hashes());
+          if (this.sameAs) {
+            return has_hash(this.sameAs, p.hashes());
           }
           return false;
         }

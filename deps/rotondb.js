@@ -51,12 +51,12 @@ RotonDBUtil = {
     return s.replace(RotonDBUtil.regexEscapePattern, "\\$&");
   },
 
-  wildcardToRegex: {},
+  wildcardToRegexCache: {},
   wildcardToRegex(pattern) {
-    var regex = RotonDBUtil.wildcardToRegex[pattern];
+    var regex = RotonDBUtil.wildcardToRegexCache[pattern];
     if (regex)
       return regex;
-    return RotonDBUtil.wildcardToRegex[pattern] =
+    return RotonDBUtil.wildcardToRegexCache[pattern] =
       new RegExp("^" +
         pattern.split("*")
           .map(s => RotonDBUtil.regexEscape(s))
@@ -68,7 +68,7 @@ RotonDBUtil = {
     if (typeof patterns === "string")
       return str.match(RotonDBUtil.wildcardToRegex(patterns));
     for (var i in patterns)
-      if (str.match(RotonDBUtil.wildcardToRegex(patterns[i])))
+      if (RotonDBUtil.matchPattern(str, patterns[i]))
         return true;
     return false;
   },
@@ -83,9 +83,16 @@ RotonDBUtil = {
   },
 
   unwrapRecord(data) {
+    data = JSON.parse(JSON.stringify(data));
+
     data.getRecordURL = (_=>()=>_)(data["_url"]);
+    delete data["_url"];
     data.getRecordOrigin = (_=>()=>_)(data["_origin"]);
+    delete data["_origin"];
     data.getIndexedAt = (_=>()=>_)(data["_indexed"]);
+    delete data["_indexed"];
+    data.getVersion = (_=>()=>_)(data["_version"]);
+    delete data["_version"];
 
     return data;
   },
@@ -837,16 +844,21 @@ function RotonDBTable(db, name) {
       return undefined;
     }
 
-    return await this._ingest(archive, path, record);
+    return await this._ingest(archive, path, record, true);
   }
 
-  this._ingest = async function(archive, path, record) {
+  this._ingest = async function(archive, path, record, validate) {
     if (this._def.preprocess) this._def.preprocess(record);
-    if (this._def.validate) this._def.validate(record);
+    if (validate && this._def.validate && !this._def.validate(record)) {
+      this._ack(archive, path, undefined);
+      var store = this._store("readwrite");
+      await RotonDBUtil.promiseRequest(store.delete(url));
+      return undefined;
+    }
 
     record = RotonDBUtil.wrapRecord(archive, path, record);
 
-    this._ack(archive, path, record);    
+    this._ack(archive, path, record);
 
     var store = this._store("readwrite");
     await RotonDBUtil.promiseRequest(store.put(record, archive.url + path));
@@ -1090,9 +1102,10 @@ function RotonDBTable(db, name) {
       throw new Error("Archive "+archiveURL+" not indexed");
 
     if (this._def.serialize) record = this._def.serialize(record);
-    else record = JSON.parse(JSON.stringify(record));
+
+    record = JSON.parse(JSON.stringify(record));
     
-    await this._ingest(archive, path, record);
+    await this._ingest(archive, path, record, false);
     this._db._fire("indexes-updated", archiveURL + path);
     this._db._writeSafe(url, archive, path, record); // Don't await this.
     return archiveURL + path;
