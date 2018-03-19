@@ -331,7 +331,7 @@ This is preferred if you're on a limited data plan. Make sure to {#disable_disco
   {
     if (this.__refresh_lazy__)
       clearTimeout(this.__refresh_lazy__);
-    this.__refresh_lazy__ = setTimeout(() => this.refresh("lazy: " + why), 100);
+    this.__refresh_lazy__ = setTimeout(() => this.refresh("lazy: " + why), 10000);
   }
   this.refresh = async function(why)
   {
